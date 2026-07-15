@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Key, Eye, EyeOff } from 'lucide-react';
 
-export default function AdminPanel({ settings, onUpdateSettings, emailGatewaySettings, onUpdateEmailSettings, onSendEmailOtp, googleClientId, onUpdateGoogleClientId, adminAccessToken, onUpdateAdminAccessToken, user, bookings, onClose, onClearBookings, onEndActiveSession, activeBookings, stations, onUpdateStations, showToast }) {
+export default function AdminPanel({ settings, onUpdateSettings, emailGatewaySettings, onUpdateEmailSettings, onSendEmailOtp, googleClientId, onUpdateGoogleClientId, adminAccessToken, onUpdateAdminAccessToken, user, bookings, onClose, onClearBookings, onEndActiveSession, activeBookings, stations, onUpdateStations, showToast, cfWorkerUrl, onUpdateCfWorkerUrl }) {
   const [pin, setPin] = useState('');
   const [tokenInput, setTokenInput] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
@@ -45,6 +45,7 @@ export default function AdminPanel({ settings, onUpdateSettings, emailGatewaySet
 
   const [gClientId, setGClientId] = useState(googleClientId || '');
   const [adminTokenVal, setAdminTokenVal] = useState(adminAccessToken || '');
+  const [cfWorkerUrlInput, setCfWorkerUrlInput] = useState(cfWorkerUrl || '');
 
   const handleSaveEmailSettings = (e) => {
     e.preventDefault();
@@ -56,6 +57,7 @@ export default function AdminPanel({ settings, onUpdateSettings, emailGatewaySet
     });
     onUpdateGoogleClientId(gClientId);
     onUpdateAdminAccessToken(adminTokenVal);
+    onUpdateCfWorkerUrl(cfWorkerUrlInput);
     showToast('Gateways configurations updated.');
   };
 
@@ -609,6 +611,21 @@ export default function AdminPanel({ settings, onUpdateSettings, emailGatewaySet
                 />
                 <p className="mono" style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
                   Used to authenticate or bypass the Admin authentication modal (Default: admin-token-777).
+                </p>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0, marginTop: '1rem' }}>
+                <label className="form-label" htmlFor="cf-worker-url">Cloudflare Workers API URL</label>
+                <input
+                  id="cf-worker-url"
+                  type="text"
+                  className="form-input mono-input"
+                  placeholder="https://gamezone-backend.xxxx.workers.dev"
+                  value={cfWorkerUrlInput}
+                  onChange={(e) => setCfWorkerUrlInput(e.target.value)}
+                />
+                <p className="mono" style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
+                  Enable real-time synchronization of all configuration databases using a serverless Cloudflare Worker backend.
                 </p>
               </div>
 

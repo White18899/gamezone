@@ -70,6 +70,87 @@ export default function App() {
     return localStorage.getItem('gz_admin_access_token') || 'admin-token-777';
   });
 
+  const [cfWorkerUrl, setCfWorkerUrl] = useState(() => {
+    return localStorage.getItem('gz_cf_worker_url') || '';
+  });
+
+  useEffect(() => {
+    if (cfWorkerUrl) {
+      localStorage.setItem('gz_cf_worker_url', cfWorkerUrl);
+    } else {
+      localStorage.removeItem('gz_cf_worker_url');
+    }
+  }, [cfWorkerUrl]);
+
+  // Pull Cloud Data Effect
+  useEffect(() => {
+    if (!cfWorkerUrl) return;
+
+    const loadCloudData = async () => {
+      try {
+        const res = await fetch(`${cfWorkerUrl.replace(/\/$/, '')}/api/data`);
+        if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+        const data = await res.json();
+        
+        if (data && data.found !== false) {
+          if (data.settings) setSettings(data.settings);
+          if (data.stations) setStations(data.stations);
+          if (data.bookings) setBookings(data.bookings);
+          if (data.activeBookings) setActiveBookings(data.activeBookings);
+          if (data.emailGatewaySettings) setEmailGatewaySettings(data.emailGatewaySettings);
+          if (data.googleClientId) setGoogleClientId(data.googleClientId);
+          if (data.adminAccessToken) setAdminAccessToken(data.adminAccessToken);
+          
+          showToast('🤖 Serverless cloud database synced.');
+        }
+      } catch (err) {
+        console.error('Failed to sync cloud databases:', err);
+        showToast('⚠️ Cloud database connection failed. Running offline mode.');
+      }
+    };
+
+    loadCloudData();
+  }, [cfWorkerUrl]);
+
+  // Push Cloud Data Effect
+  const isInitialMount = useRef(true);
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    
+    if (!cfWorkerUrl) return;
+
+    const pushCloudData = async () => {
+      try {
+        const payload = {
+          settings,
+          stations,
+          bookings,
+          activeBookings,
+          emailGatewaySettings,
+          googleClientId,
+          adminAccessToken
+        };
+        
+        const res = await fetch(`${cfWorkerUrl.replace(/\/$/, '')}/api/data`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+      } catch (err) {
+        console.error('Failed to save cloud updates:', err);
+      }
+    };
+
+    const handler = setTimeout(pushCloudData, 1000);
+    return () => clearTimeout(handler);
+  }, [cfWorkerUrl, settings, stations, bookings, activeBookings, emailGatewaySettings, googleClientId, adminAccessToken]);
+
 
 
   // --- Temporary UI States ---
@@ -570,6 +651,8 @@ export default function App() {
           onClearBookings={handleClearBookings}
           onEndActiveSession={handleEndActiveSession}
           showToast={showToast}
+          cfWorkerUrl={cfWorkerUrl}
+          onUpdateCfWorkerUrl={setCfWorkerUrl}
           onClose={() => {
             setShowAdmin(false);
             window.history.pushState(null, '', '/');
