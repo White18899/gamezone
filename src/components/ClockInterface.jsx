@@ -5,6 +5,7 @@ export default function ClockInterface({ settings, onBookSession, activeBooking,
   const minTime = settings.minTime || 30; // in minutes
   const pricePerHalfHour = settings.pricePerHalfHour || 50;
   const stationName = settings.stationName || 'PlayStation 5 Console #1';
+  const isOffline = settings.stationStatus === 'maintenance';
 
   // --- States ---
   const [duration, setDuration] = useState(minTime);
@@ -197,10 +198,10 @@ export default function ClockInterface({ settings, onBookSession, activeBooking,
           y2={hy2}
           stroke="transparent"
           strokeWidth="12"
-          style={{ cursor: isReserved ? 'not-allowed' : 'pointer' }}
-          onMouseEnter={() => !isReserved && setHoveredTick(i)}
+          style={{ cursor: isOffline || isReserved ? 'not-allowed' : 'pointer' }}
+          onMouseEnter={() => !isOffline && !isReserved && setHoveredTick(i)}
           onMouseLeave={() => setHoveredTick(null)}
-          onClick={() => !isReserved && handleTickClick(i)}
+          onClick={() => !isOffline && !isReserved && handleTickClick(i)}
         />
       );
     }
@@ -210,6 +211,15 @@ export default function ClockInterface({ settings, onBookSession, activeBooking,
 
   // Center display text configuration for Clock B
   const getClockBText = () => {
+    if (isOffline) {
+      return {
+        value: 'OFFLINE',
+        label: 'MAINTENANCE',
+        action: null,
+        cursor: 'default'
+      };
+    }
+    
     const formattedEnd = currentPreview.end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
     
     if (hoveredTick !== null) {
@@ -261,13 +271,30 @@ export default function ClockInterface({ settings, onBookSession, activeBooking,
     <div className="card glass">
       {/* Header Info */}
       <div className="card-subtitle" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-        <Gamepad2 size={12} style={{ opacity: 0.6 }} /> RIG STATION 01
+        <Gamepad2 size={12} style={{ opacity: 0.6 }} /> RIG NODE STATE
       </div>
       <div className="card-title" style={{ marginTop: '0.25rem', marginBottom: '2.5rem' }}>
         <span>{stationName}</span>
-        <span className="station-badge">
-          <span className={`station-status-indicator ${activeBooking ? 'busy' : ''}`}></span>
-          {activeBooking ? 'Busy' : 'Standby'}
+        <span className="station-badge" style={{
+          backgroundColor: isOffline ? 'rgba(255, 59, 48, 0.1)' : activeBooking ? 'rgba(255, 214, 10, 0.1)' : 'rgba(52, 199, 89, 0.1)',
+          color: isOffline ? '#ff3b30' : activeBooking ? '#ffd60a' : '#34c759',
+          fontFamily: 'var(--font-mono)',
+          fontSize: '0.65rem',
+          letterSpacing: '0.05em',
+          textTransform: 'uppercase',
+          padding: '0.25rem 0.5rem',
+          borderRadius: 'var(--radius-sm)',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '0.35rem'
+        }}>
+          <span className="station-status-indicator" style={{
+            width: '6px',
+            height: '6px',
+            borderRadius: '50%',
+            backgroundColor: isOffline ? '#ff3b30' : activeBooking ? '#ffd60a' : '#34c759'
+          }}></span>
+          {isOffline ? 'Offline' : activeBooking ? 'Busy' : 'Standby'}
         </span>
       </div>
 
@@ -320,7 +347,7 @@ export default function ClockInterface({ settings, onBookSession, activeBooking,
             </svg>
             <div 
               className="clock-center-info" 
-              onClick={clockBInfo.action}
+              onClick={!isOffline ? clockBInfo.action : null}
               style={{ cursor: clockBInfo.cursor, userSelect: 'none' }}
             >
               <span className="clock-time" style={{ fontSize: '2.25rem', letterSpacing: '-0.02em' }}>{clockBInfo.value}</span>
@@ -343,110 +370,134 @@ export default function ClockInterface({ settings, onBookSession, activeBooking,
 
       <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
         <p className="mono" style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-          💡 Click directly on <strong style={{ color: '#fff' }}>Clock B ticks</strong> to select a start time slot.
+          {isOffline 
+            ? '⚠️ Rig selected is offline. Scheduler access disabled.' 
+            : '💡 Click directly on Clock B ticks to select a start time slot.'
+          }
         </p>
       </div>
 
       {/* Booking Form Options */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
-        
-        {/* Time Slider (Controls Duration) */}
-        <div>
-          <label className="form-label">
-            <Calendar size={10} style={{ verticalAlign: 'middle', marginRight: '0.5rem', opacity: 0.5 }} />
-            Configure Playtime Length
-          </label>
-          <div className="duration-slider-wrapper" style={{ margin: '0 auto', width: '100%', maxWidth: 'none' }}>
+      {isOffline ? (
+        <div className="glass" style={{ 
+          padding: '2.5rem 1.5rem', 
+          borderRadius: 'var(--radius-sm)', 
+          textAlign: 'center', 
+          border: '1px dashed #ff3b30', 
+          background: 'rgba(255, 59, 48, 0.02)',
+          marginTop: '1rem'
+        }}>
+          <Gamepad2 size={32} style={{ color: '#ff3b30', marginBottom: '1rem', display: 'inline-block' }} />
+          <h3 className="mono" style={{ fontSize: '0.9rem', color: '#ff3b30', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+            Rig Node Offline
+          </h3>
+          <p className="mono" style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.5rem', lineHeight: '1.4' }}>
+            This station is currently undergoing system configuration or routine server maintenance. Please select another active rig pod.
+          </p>
+        </div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
+            
+            {/* Time Slider (Controls Duration) */}
+            <div>
+              <label className="form-label">
+                <Calendar size={10} style={{ verticalAlign: 'middle', marginRight: '0.5rem', opacity: 0.5 }} />
+                Configure Playtime Length
+              </label>
+              <div className="duration-slider-wrapper" style={{ margin: '0 auto', width: '100%', maxWidth: 'none' }}>
+                <button 
+                  onClick={decrementTime} 
+                  disabled={duration <= minTime || !!activeBooking}
+                  className="slider-btn"
+                >
+                  <Minus size={14} />
+                </button>
+                <input
+                  type="range"
+                  min={minTime}
+                  max="480"
+                  step="15"
+                  value={duration}
+                  onChange={handleSliderChange}
+                  disabled={!!activeBooking}
+                  className="custom-range-slider"
+                />
+                <button 
+                  onClick={incrementTime} 
+                  disabled={duration >= 480 || !!activeBooking}
+                  className="slider-btn"
+                >
+                  <Plus size={14} />
+                </button>
+              </div>
+            </div>
+
+            {/* Account selection toggle */}
+            <div>
+              <h3 className="card-subtitle">Credential Privilege</h3>
+              <div className="account-selector" style={{ marginTop: '0.5rem' }}>
+                <div 
+                  className={`account-option ${accountType === 'own' ? 'selected' : ''}`}
+                  onClick={() => !activeBooking && setAccountType('own')}
+                >
+                  <div className="option-title">User Account</div>
+                  <div className="option-desc">Connect using personal PlayStation Network credentials.</div>
+                </div>
+                <div 
+                  className={`account-option ${accountType === 'gamezone' ? 'selected' : ''}`}
+                  onClick={() => !activeBooking && setAccountType('gamezone')}
+                >
+                  <div className="option-title">Arena Account</div>
+                  <div className="option-desc">Play instantly using pre-loaded games on local admin account.</div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Timeline Reservation Summary Row */}
+          <div className="booking-summary-row" style={{ marginTop: '2.5rem' }}>
+            <div className="summary-info-wrapper">
+              <div className="summary-price-container">
+                <span className="summary-price-label">Reserve Start</span>
+                <span className="mono" style={{ fontSize: '1.25rem', marginTop: '0.25rem', fontWeight: '500', display: 'block' }}>
+                  {selectedStart === 'now' 
+                    ? 'IMMEDIATE' 
+                    : new Date(selectedStart).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+                  }
+                </span>
+              </div>
+
+              <div className="summary-price-container est-finish-container">
+                <span className="summary-price-label">Est. Finish</span>
+                <span className="mono" style={{ fontSize: '1.25rem', marginTop: '0.25rem', fontWeight: '500', display: 'block' }}>
+                  {currentPreview.end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
+                </span>
+              </div>
+
+              <div className="summary-price-container estimated-rate-container">
+                <span className="summary-price-label">Estimated Rate</span>
+                <span className="summary-price" style={{ fontSize: '1.75rem', marginTop: '0' }}>₹{totalPrice}</span>
+              </div>
+            </div>
+
             <button 
-              onClick={decrementTime} 
-              disabled={duration <= minTime || !!activeBooking}
-              className="slider-btn"
-            >
-              <Minus size={14} />
-            </button>
-            <input
-              type="range"
-              min={minTime}
-              max="480"
-              step="15"
-              value={duration}
-              onChange={handleSliderChange}
+              onClick={handleBook} 
               disabled={!!activeBooking}
-              className="custom-range-slider"
-            />
-            <button 
-              onClick={incrementTime} 
-              disabled={duration >= 480 || !!activeBooking}
-              className="slider-btn"
+              className="btn-primary"
             >
-              <Plus size={14} />
+              {activeBooking 
+                ? 'Session Engaged' 
+                : selectedStart === 'now' 
+                  ? 'Book Station' 
+                  : 'Reserve Slot'
+              } 
+              <Check size={14} />
             </button>
           </div>
-        </div>
-
-        {/* Account selection toggle */}
-        <div>
-          <h3 className="card-subtitle">Credential Privilege</h3>
-          <div className="account-selector" style={{ marginTop: '0.5rem' }}>
-            <div 
-              className={`account-option ${accountType === 'own' ? 'selected' : ''}`}
-              onClick={() => !activeBooking && setAccountType('own')}
-            >
-              <div className="option-title">User Account</div>
-              <div className="option-desc">Connect using personal PlayStation Network credentials.</div>
-            </div>
-            <div 
-              className={`account-option ${accountType === 'gamezone' ? 'selected' : ''}`}
-              onClick={() => !activeBooking && setAccountType('gamezone')}
-            >
-              <div className="option-title">Arena Account</div>
-              <div className="option-desc">Play instantly using pre-loaded games on local admin account.</div>
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      {/* Timeline Reservation Summary Row */}
-      <div className="booking-summary-row" style={{ marginTop: '2.5rem' }}>
-        <div className="summary-info-wrapper">
-          <div className="summary-price-container">
-            <span className="summary-price-label">Reserve Start</span>
-            <span className="mono" style={{ fontSize: '1.25rem', marginTop: '0.25rem', fontWeight: '500', display: 'block' }}>
-              {selectedStart === 'now' 
-                ? 'IMMEDIATE' 
-                : new Date(selectedStart).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
-              }
-            </span>
-          </div>
-
-          <div className="summary-price-container est-finish-container">
-            <span className="summary-price-label">Est. Finish</span>
-            <span className="mono" style={{ fontSize: '1.25rem', marginTop: '0.25rem', fontWeight: '500', display: 'block' }}>
-              {currentPreview.end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
-            </span>
-          </div>
-
-          <div className="summary-price-container estimated-rate-container">
-            <span className="summary-price-label">Estimated Rate</span>
-            <span className="summary-price" style={{ fontSize: '1.75rem', marginTop: '0' }}>₹{totalPrice}</span>
-          </div>
-        </div>
-
-        <button 
-          onClick={handleBook} 
-          disabled={!!activeBooking}
-          className="btn-primary"
-        >
-          {activeBooking 
-            ? 'Session Engaged' 
-            : selectedStart === 'now' 
-              ? 'Book Station' 
-              : 'Reserve Slot'
-          } 
-          <Check size={14} />
-        </button>
-      </div>
+        </>
+      )}
     </div>
   );
 }

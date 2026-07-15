@@ -32,9 +32,22 @@ export default function App() {
     return saved ? JSON.parse(saved) : [];
   });
 
-  const [activeBooking, setActiveBooking] = useState(() => {
-    const saved = localStorage.getItem('gz_active_booking');
-    return saved ? JSON.parse(saved) : null;
+  const [stations, setStations] = useState(() => {
+    const saved = localStorage.getItem('gz_stations');
+    return saved ? JSON.parse(saved) : [
+      { id: '1', name: 'PlayStation 5 Console #1', status: 'online' }
+    ];
+  });
+
+  const [selectedStationName, setSelectedStationName] = useState(() => {
+    const saved = localStorage.getItem('gz_stations');
+    const parsed = saved ? JSON.parse(saved) : [];
+    return parsed.length > 0 ? parsed[0].name : 'PlayStation 5 Console #1';
+  });
+
+  const [activeBookings, setActiveBookings] = useState(() => {
+    const saved = localStorage.getItem('gz_active_bookings');
+    return saved ? JSON.parse(saved) : {};
   });
 
 
@@ -118,44 +131,52 @@ export default function App() {
   }, [adminAccessToken]);
 
   useEffect(() => {
-    if (activeBooking) {
-      localStorage.setItem('gz_active_booking', JSON.stringify(activeBooking));
-    } else {
-      localStorage.removeItem('gz_active_booking');
-    }
-  }, [activeBooking]);
+    localStorage.setItem('gz_stations', JSON.stringify(stations));
+  }, [stations]);
 
-  // Handle active session countdown
   useEffect(() => {
-    if (activeBooking) {
-      // Clear any existing intervals
+    localStorage.setItem('gz_active_bookings', JSON.stringify(activeBookings));
+  }, [activeBookings]);
+
+  // Handle active sessions countdown
+  useEffect(() => {
+    const activeKeys = Object.keys(activeBookings);
+    if (activeKeys.length > 0) {
       if (timerRef.current) clearInterval(timerRef.current);
-      
+
       timerRef.current = setInterval(() => {
-        setActiveBooking((prev) => {
-          if (!prev) return null;
-          if (prev.secondsRemaining <= 1) {
-            clearInterval(timerRef.current);
-            // Add session as finished in logs
-            const finishedRecord = {
-              id: prev.id,
-              userName: user?.name || 'Unknown',
-              userPhone: user?.phone || 'N/A',
-              stationName: prev.stationName,
-              duration: prev.duration,
-              accountType: prev.accountType,
-              price: prev.price,
-              status: 'Completed',
-              timestamp: new Date().toLocaleString()
-            };
-            setBookings((old) => [finishedRecord, ...old]);
-            showToast('⚡ Session completed successfully!');
-            return null;
+        setActiveBookings((prev) => {
+          const updated = { ...prev };
+          let changed = false;
+
+          for (const stationName of Object.keys(updated)) {
+            const session = updated[stationName];
+            if (session.secondsRemaining <= 1) {
+              // Complete session
+              const finishedRecord = {
+                id: session.id,
+                userName: user?.name || 'Unknown',
+                userPhone: user?.phone || 'N/A',
+                stationName: session.stationName,
+                duration: session.duration,
+                accountType: session.accountType,
+                price: session.price,
+                status: 'Completed',
+                timestamp: new Date().toLocaleString()
+              };
+              setBookings((old) => [finishedRecord, ...old]);
+              showToast(`⚡ Session on ${session.stationName} completed successfully!`);
+              delete updated[stationName];
+              changed = true;
+            } else {
+              updated[stationName] = {
+                ...session,
+                secondsRemaining: session.secondsRemaining - 1
+              };
+              changed = true;
+            }
           }
-          return {
-            ...prev,
-            secondsRemaining: prev.secondsRemaining - 1
-          };
+          return changed ? updated : prev;
         });
       }, 1000);
     } else {
@@ -165,7 +186,7 @@ export default function App() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [activeBooking, user]);
+  }, [activeBookings, user]);
 
   // Handle auto-activation of scheduled bookings when real time hits start time
   useEffect(() => {
@@ -175,7 +196,7 @@ export default function App() {
         (b) => b.status === 'Scheduled' && new Date(b.startTime) <= now
       );
 
-      if (scheduled && !activeBooking) {
+      if (scheduled && !activeBookings[scheduled.stationName]) {
         const newSession = {
           id: scheduled.id,
           stationName: scheduled.stationName,
@@ -190,13 +211,16 @@ export default function App() {
         setBookings((prev) =>
           prev.map((b) => (b.id === scheduled.id ? { ...b, status: 'Active' } : b))
         );
-        setActiveBooking(newSession);
-        showToast(`⚡ Scheduled slot is now ACTIVE!`);
+        setActiveBookings((prev) => ({
+          ...prev,
+          [scheduled.stationName]: newSession
+        }));
+        showToast(`⚡ Scheduled slot on ${scheduled.stationName} is now ACTIVE!`);
       }
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [bookings, activeBooking]);
+  }, [bookings, activeBookings]);
 
   // Toast Helper
   const showToast = (message, otp = null) => {
@@ -221,7 +245,7 @@ export default function App() {
 
   const handleLogout = () => {
     setUser(null);
-    setActiveBooking(null);
+    setActiveBookings({});
     showToast('Logged out of system.');
   };
 
@@ -257,23 +281,27 @@ export default function App() {
         maxDuration: bookingDetails.duration,
         reservedTime: endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
       };
-      setActiveBooking(newSession);
+      setActiveBookings((prev) => ({
+        ...prev,
+        [bookingDetails.stationName]: newSession
+      }));
     }
 
     setBookings((old) => [record, ...old]);
     showToast(isNow ? `⚡ Station booked immediately!` : `📅 Reserved slot for ${startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}!`);
   };
 
-  const handleEndActiveSession = () => {
-    if (!activeBooking) return;
+  const handleEndActiveSession = (stationName) => {
+    const targetSession = activeBookings[stationName];
+    if (!targetSession) return;
     
     // End session early
     const updatedBookings = bookings.map((b) => {
-      if (b.id === activeBooking.id) {
+      if (b.id === targetSession.id) {
         return {
           ...b,
           status: 'Ended Early',
-          duration: activeBooking.maxDuration - Math.ceil(activeBooking.secondsRemaining),
+          duration: targetSession.maxDuration - Math.ceil(targetSession.secondsRemaining),
           timestamp: new Date().toLocaleString()
         };
       }
@@ -281,8 +309,12 @@ export default function App() {
     });
 
     setBookings(updatedBookings);
-    setActiveBooking(null);
-    showToast('Session terminated by user.');
+    setActiveBookings((prev) => {
+      const updated = { ...prev };
+      delete updated[stationName];
+      return updated;
+    });
+    showToast(`Session on ${stationName} terminated.`);
   };
 
   const handleUpdateSettings = (newSettings) => {
@@ -417,25 +449,25 @@ export default function App() {
           />
         )}
 
-        {/* Active Booking Banner */}
-        {activeBooking && (
-          <div className="active-session-banner border-glow">
+        {/* Active Booking Banners */}
+        {Object.values(activeBookings).map((session) => (
+          <div key={session.id} className="active-session-banner border-glow" style={{ marginBottom: '1.25rem' }}>
             <div className="session-info">
               <div className="session-status">
                 <Clock size={12} className="animate-spin-slow" /> ACTIVE TIMER
               </div>
-              <div style={{ fontWeight: '500', fontSize: '1.1rem' }}>{activeBooking.stationName}</div>
+              <div style={{ fontWeight: '500', fontSize: '1.1rem' }}>{session.stationName}</div>
               <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                Playing on: <span className="mono" style={{ textTransform: 'uppercase' }}>{activeBooking.accountType} account</span>
+                Playing on: <span className="mono" style={{ textTransform: 'uppercase' }}>{session.accountType} account</span>
               </div>
             </div>
             
             <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
               <div className="session-timer-large">
-                {formatTimer(activeBooking.secondsRemaining)}
+                {formatTimer(session.secondsRemaining)}
               </div>
               <button 
-                onClick={handleEndActiveSession} 
+                onClick={() => handleEndActiveSession(session.stationName)} 
                 className="btn-secondary" 
                 style={{ borderColor: '#ff453a', color: '#ff453a', width: 'auto', padding: '0.5rem 1rem', fontSize: '0.8rem' }}
               >
@@ -443,16 +475,72 @@ export default function App() {
               </button>
             </div>
           </div>
-        )}
+        ))}
+
+        {/* Consoles / Rig Pods Selector Grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem', marginBottom: '2.5rem' }}>
+          {stations.map((st) => {
+            const activeSession = activeBookings[st.name];
+            const isSelected = selectedStationName === st.name;
+            return (
+              <div 
+                key={st.id} 
+                onClick={() => setSelectedStationName(st.name)}
+                className={`glass ${isSelected ? 'border-glow' : ''}`}
+                style={{ 
+                  padding: '1.25rem', 
+                  borderRadius: 'var(--radius-sm)', 
+                  cursor: 'pointer',
+                  border: isSelected ? '1px solid var(--text-primary)' : '1px solid var(--border-subtle)',
+                  background: isSelected ? 'rgba(255,255,255,0.03)' : 'rgba(3,3,3,0.5)',
+                  transition: 'all var(--transition-fast)'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                  <span className="mono" style={{ fontSize: '0.6rem', color: 'var(--text-secondary)', letterSpacing: '0.05em' }}>
+                    IPOD_DEV: POD_{st.id}
+                  </span>
+                  <span className="mono" style={{ 
+                    fontSize: '0.55rem', 
+                    textTransform: 'uppercase', 
+                    padding: '0.2rem 0.5rem', 
+                    borderRadius: '2px',
+                    fontWeight: '600',
+                    letterSpacing: '0.05em',
+                    backgroundColor: st.status === 'maintenance' ? 'rgba(255,59,48,0.1)' : activeSession ? 'rgba(255,214,10,0.1)' : 'rgba(52,199,89,0.1)',
+                    color: st.status === 'maintenance' ? '#ff3b30' : activeSession ? '#ffd60a' : '#34c759'
+                  }}>
+                    {st.status === 'maintenance' ? 'offline' : activeSession ? 'active' : 'online'}
+                  </span>
+                </div>
+                <h4 className="mono" style={{ fontSize: '0.85rem', fontWeight: '500', textTransform: 'uppercase', color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)' }}>{st.name}</h4>
+                {activeSession ? (
+                  <div className="mono" style={{ fontSize: '0.85rem', color: '#ffd60a', marginTop: '0.5rem', fontWeight: '600' }}>
+                    REMAINING: {formatTimer(activeSession.secondsRemaining)}
+                  </div>
+                ) : (
+                  <div className="mono" style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                    {st.status === 'maintenance' ? 'Under Maintenance' : 'Available for Booking'}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
 
         {/* Main Grid Dashboard */}
         <div className="dashboard-grid">
           {/* Station / Clock Select Panel */}
           <ClockInterface 
-            settings={settings} 
+            settings={{
+              minTime: settings.minTime,
+              pricePerHalfHour: settings.pricePerHalfHour,
+              stationName: selectedStationName,
+              stationStatus: stations.find(s => s.name === selectedStationName)?.status || 'online'
+            }} 
             onBookSession={handleBookSession}
-            activeBooking={activeBooking}
-            bookings={bookings}
+            activeBooking={activeBookings[selectedStationName]}
+            bookings={bookings.filter(b => b.stationName === selectedStationName)}
           />
 
           {/* Location & Details Desk Panel */}
@@ -472,9 +560,11 @@ export default function App() {
           onUpdateGoogleClientId={setGoogleClientId}
           adminAccessToken={adminAccessToken}
           onUpdateAdminAccessToken={setAdminAccessToken}
+          stations={stations}
+          onUpdateStations={setStations}
           user={user}
           bookings={bookings}
-          activeBooking={activeBooking}
+          activeBookings={activeBookings}
           onClearBookings={handleClearBookings}
           onEndActiveSession={handleEndActiveSession}
           onClose={() => {

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Key, Eye, EyeOff } from 'lucide-react';
 
-export default function AdminPanel({ settings, onUpdateSettings, emailGatewaySettings, onUpdateEmailSettings, onSendEmailOtp, googleClientId, onUpdateGoogleClientId, adminAccessToken, onUpdateAdminAccessToken, user, bookings, onClose, onClearBookings, onEndActiveSession, activeBooking }) {
+export default function AdminPanel({ settings, onUpdateSettings, emailGatewaySettings, onUpdateEmailSettings, onSendEmailOtp, googleClientId, onUpdateGoogleClientId, adminAccessToken, onUpdateAdminAccessToken, user, bookings, onClose, onClearBookings, onEndActiveSession, activeBookings, stations, onUpdateStations }) {
   const [pin, setPin] = useState('');
   const [tokenInput, setTokenInput] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
@@ -13,8 +13,23 @@ export default function AdminPanel({ settings, onUpdateSettings, emailGatewaySet
   
   const [minTime, setMinTime] = useState(settings.minTime || 30);
   const [pricePerHalfHour, setPricePerHalfHour] = useState(settings.pricePerHalfHour || 50);
-  const [stationName, setStationName] = useState(settings.stationName || 'PlayStation 5 Console #1');
-  const [stationStatus, setStationStatus] = useState(settings.stationStatus || 'online');
+  const [newConsoleName, setNewConsoleName] = useState('');
+
+  const [selectedConsoleId, setSelectedConsoleId] = useState(() => stations[0]?.id || '');
+  const [editingConsoleName, setEditingConsoleName] = useState(() => stations[0]?.name || '');
+
+  React.useEffect(() => {
+    if (stations.length > 0) {
+      const exists = stations.some(s => s.id === selectedConsoleId);
+      if (!exists) {
+        setSelectedConsoleId(stations[0].id);
+        setEditingConsoleName(stations[0].name);
+      }
+    } else {
+      setSelectedConsoleId('');
+      setEditingConsoleName('');
+    }
+  }, [stations, selectedConsoleId]);
 
   const [activeTab, setActiveTab] = useState('settings');
 
@@ -89,11 +104,18 @@ export default function AdminPanel({ settings, onUpdateSettings, emailGatewaySet
 
   const handleSaveSettings = (e) => {
     e.preventDefault();
+    
+    // Update renamed console if selected
+    if (selectedConsoleId && editingConsoleName.trim()) {
+      const updatedStations = stations.map(s => 
+        s.id === selectedConsoleId ? { ...s, name: editingConsoleName.trim() } : s
+      );
+      onUpdateStations(updatedStations);
+    }
+
     onUpdateSettings({
       minTime: parseInt(minTime, 10),
-      pricePerHalfHour: parseFloat(pricePerHalfHour),
-      stationName,
-      stationStatus
+      pricePerHalfHour: parseFloat(pricePerHalfHour)
     });
     alert('Configurations applied.');
   };
@@ -221,16 +243,41 @@ export default function AdminPanel({ settings, onUpdateSettings, emailGatewaySet
         {/* Tab 1: Settings Form */}
         {activeTab === 'settings' && (
           <form onSubmit={handleSaveSettings} className="admin-section">
-            <div className="form-group">
-              <label className="form-label" htmlFor="station-name-input">Station Label</label>
-              <input
-                id="station-name-input"
-                type="text"
-                className="form-input"
-                value={stationName}
-                onChange={(e) => setStationName(e.target.value)}
-                required
-              />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" htmlFor="select-console-edit">Select Console</label>
+                <select
+                  id="select-console-edit"
+                  className="form-input mono-input"
+                  value={selectedConsoleId}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setSelectedConsoleId(id);
+                    const target = stations.find(s => s.id === id);
+                    if (target) setEditingConsoleName(target.name);
+                  }}
+                  style={{ padding: '0.8rem 1.25rem', background: '#050505', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)' }}
+                >
+                  <option value="" disabled>-- Choose Pod Node --</option>
+                  {stations.map(st => (
+                    <option key={st.id} value={st.id}>{st.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" htmlFor="edit-console-name-input">Console Label / Name</label>
+                <input
+                  id="edit-console-name-input"
+                  type="text"
+                  className="form-input mono-input"
+                  placeholder="Rename selected console"
+                  value={editingConsoleName}
+                  onChange={(e) => setEditingConsoleName(e.target.value)}
+                  disabled={!selectedConsoleId}
+                  required
+                />
+              </div>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
@@ -328,7 +375,7 @@ export default function AdminPanel({ settings, onUpdateSettings, emailGatewaySet
                           </span>
                           {booking.status === 'Active' && (
                             <button 
-                              onClick={onEndActiveSession} 
+                              onClick={() => onEndActiveSession(booking.stationName)} 
                               style={{ 
                                 marginLeft: '0.5rem', 
                                 background: 'none', 
@@ -349,70 +396,128 @@ export default function AdminPanel({ settings, onUpdateSettings, emailGatewaySet
                 </tbody>
               </table>
             </div>
-            
-            {activeBooking && (
-              <div className="glass" style={{ padding: '1.25rem', borderRadius: 'var(--radius-sm)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem' }}>
-                <span className="mono" style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>ENGAGED SESSION NODE ACTIVE</span>
-                <button 
-                  onClick={onEndActiveSession} 
-                  className="mono btn-secondary" 
-                  style={{ width: 'auto', padding: '0.5rem 1rem', borderColor: '#ff3b30', color: '#ff3b30', fontSize: '0.7rem' }}
-                >
-                  DISCONNECT SESSION
-                </button>
-              </div>
-            )}
           </div>
         )}
 
         {/* Tab 3: Rig Pods */}
         {activeTab === 'stations' && (
-          <div className="admin-section">
-            <h3 className="mono" style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>rig states</h3>
-            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Toggle nodes availability states.
-            </p>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '0.5rem' }}>
-              <div className="glass" style={{ padding: '1.5rem', borderRadius: 'var(--radius-sm)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontWeight: '500', textTransform: 'uppercase', fontSize: '0.9rem' }}>{stationName}</div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>IPOD_DEV: PS5_CONSOLE_ALPHA</div>
+          <div className="admin-section" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+            {/* List and Status toggle */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <h3 className="mono" style={{ fontSize: '0.8rem', textTransform: 'uppercase', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.5rem', letterSpacing: '0.05em' }}>rig states</h3>
+              <p className="mono" style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>Toggle node states or delete pods.</p>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '0.5rem' }}>
+                {stations.map((st) => {
+                  const hasActiveSession = !!activeBookings[st.name];
+                  return (
+                    <div key={st.id} className="glass" style={{ padding: '1rem 1.25rem', borderRadius: 'var(--radius-sm)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ flexGrow: 1, minWidth: 0, marginRight: '1rem' }}>
+                        <div style={{ fontWeight: '500', textTransform: 'uppercase', fontSize: '0.85rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{st.name}</div>
+                        <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', marginTop: '0.2rem' }}>
+                          POD_ID: POD_{st.id} {hasActiveSession && <span style={{ color: '#ffd60a' }}>(ACTIVE)</span>}
+                        </div>
+                      </div>
+                      
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <select
+                          value={st.status}
+                          onChange={(e) => {
+                            const newStatus = e.target.value;
+                            onUpdateStations(stations.map(s => s.id === st.id ? { ...s, status: newStatus } : s));
+                          }}
+                          className="mono-input"
+                          style={{
+                            padding: '0.35rem 0.5rem',
+                            fontSize: '0.7rem',
+                            background: '#050505',
+                            border: '1px solid var(--border-subtle)',
+                            color: st.status === 'online' ? '#34c759' : '#ff3b30',
+                            borderRadius: 'var(--radius-sm)',
+                            outline: 'none',
+                            textTransform: 'uppercase',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <option value="online" style={{ color: '#34c759' }}>ONLINE</option>
+                          <option value="maintenance" style={{ color: '#ff3b30' }}>OFFLINE</option>
+                        </select>
+                        
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (stations.length <= 1) {
+                              alert('Cannot delete the last console. At least one console must remain.');
+                              return;
+                            }
+                            if (confirm(`Are you sure you want to delete "${st.name}"?`)) {
+                              onUpdateStations(stations.filter(s => s.id !== st.id));
+                            }
+                          }}
+                          style={{
+                            padding: '0.35rem',
+                            background: 'rgba(255, 59, 48, 0.08)',
+                            border: '1px solid rgba(255, 59, 48, 0.2)',
+                            color: '#ff3b30',
+                            borderRadius: 'var(--radius-sm)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                          title="Delete Console"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Add Console Panel */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <h3 className="mono" style={{ fontSize: '0.8rem', textTransform: 'uppercase', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.5rem', letterSpacing: '0.05em' }}>Create Rig Pod</h3>
+              <p className="mono" style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>Instantiate a new node console to scale up the arena capacity.</p>
+              
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                if (!newConsoleName.trim()) return;
+                
+                // Check duplicate names
+                if (stations.some(s => s.name.toLowerCase() === newConsoleName.trim().toLowerCase())) {
+                  alert('A console with this label name already exists.');
+                  return;
+                }
+                
+                const newStation = {
+                  id: Date.now().toString(),
+                  name: newConsoleName.trim(),
+                  status: 'online'
+                };
+                
+                onUpdateStations([...stations, newStation]);
+                setNewConsoleName('');
+                alert(`Successfully created ${newStation.name}.`);
+              }} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginTop: '0.5rem' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label" htmlFor="new-console-name-input">Console Label / Name</label>
+                  <input
+                    id="new-console-name-input"
+                    type="text"
+                    className="form-input mono-input"
+                    placeholder="e.g. PlayStation 5 Console #2"
+                    value={newConsoleName}
+                    onChange={(e) => setNewConsoleName(e.target.value)}
+                    required
+                  />
                 </div>
                 
-                <div style={{ display: 'flex', gap: '0.75rem' }}>
-                  <button 
-                    onClick={() => { setStationStatus('online'); onUpdateSettings({ ...settings, stationStatus: 'online' }); }}
-                    className="mono"
-                    style={{
-                      padding: '0.5rem 1rem',
-                      fontSize: '0.7rem',
-                      textTransform: 'uppercase',
-                      border: '1px solid var(--border-subtle)',
-                      background: stationStatus === 'online' ? 'var(--bg-accent)' : 'transparent',
-                      color: stationStatus === 'online' ? 'var(--text-inverse)' : 'var(--text-primary)',
-                      borderRadius: 'var(--radius-sm)'
-                    }}
-                  >
-                    online
-                  </button>
-                  <button 
-                    onClick={() => { setStationStatus('maintenance'); onUpdateSettings({ ...settings, stationStatus: 'maintenance' }); }}
-                    className="mono"
-                    style={{
-                      padding: '0.5rem 1rem',
-                      fontSize: '0.7rem',
-                      textTransform: 'uppercase',
-                      border: '1px solid var(--border-subtle)',
-                      background: stationStatus === 'maintenance' ? '#ff3b30' : 'transparent',
-                      color: stationStatus === 'maintenance' ? 'white' : 'var(--text-primary)',
-                      borderRadius: 'var(--radius-sm)'
-                    }}
-                  >
-                    offline
-                  </button>
-                </div>
-              </div>
+                <button type="submit" className="btn-primary mt-1">
+                  + Create Rig Pod
+                </button>
+              </form>
             </div>
           </div>
         )}
