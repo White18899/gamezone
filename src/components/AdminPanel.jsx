@@ -156,7 +156,7 @@ export default function AdminPanel({ settings, onUpdateSettings, smsGatewaySetti
     return (
       <div className="overlay-container">
         <div className="login-card glass border-glow animate-fade-in" style={{ maxWidth: '380px' }}>
-          <div style={{ display: 'flex', justifyContext: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
             <h3 className="mono" style={{ fontSize: '0.85rem', letterSpacing: '0.15em', flexGrow: 1 }}>AUTHENTICATING LEVEL 0</h3>
             <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)' }}>
               <X size={16} />

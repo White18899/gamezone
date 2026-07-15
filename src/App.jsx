@@ -5,7 +5,7 @@ import ShapeGrid from './components/ShapeGrid';
 import ClockInterface from './components/ClockInterface';
 import ContactLocation from './components/ContactLocation';
 import AdminPanel from './components/AdminPanel';
-import { LogOut, Shield, ShieldAlert, Wifi, Clock } from 'lucide-react';
+import { LogOut, Wifi, Clock } from 'lucide-react';
 
 // Default configurations
 const DEFAULT_SETTINGS = {
