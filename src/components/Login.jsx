@@ -1,24 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Mail, ShieldCheck, ArrowRight, Play } from 'lucide-react';
 
-const decodeJwt = (token) => {
-  try {
-    const base64Url = token.split('.')[1];
-    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    const jsonPayload = decodeURIComponent(
-      window
-        .atob(base64)
-        .split('')
-        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-        .join('')
-    );
-    return JSON.parse(jsonPayload);
-  } catch (error) {
-    console.error('Error decoding JWT:', error);
-    return null;
-  }
-};
-
 export default function Login({ onLoginSuccess, onSendEmailOtp, googleClientId }) {
   // Common states
   const [error, setError] = useState('');
@@ -30,51 +12,55 @@ export default function Login({ onLoginSuccess, onSendEmailOtp, googleClientId }
   const [step, setStep] = useState(1); // 1: Enter Email, 2: Enter OTP
   const [generatedOtp, setGeneratedOtp] = useState('');
 
+  // Google OAuth Token Client State
+  const [tokenClient, setTokenClient] = useState(null);
+
   useEffect(() => {
-    if (step !== 1) return;
     if (!googleClientId) return;
 
-    const initializeGoogleSignIn = () => {
-      if (window.google && window.google.accounts) {
+    const initializeGoogleOAuth = () => {
+      if (window.google && window.google.accounts && window.google.accounts.oauth2) {
         try {
-          window.google.accounts.id.initialize({
+          const client = window.google.accounts.oauth2.initTokenClient({
             client_id: googleClientId,
-            callback: (response) => {
-              const decoded = decodeJwt(response.credential);
-              if (decoded) {
-                onLoginSuccess({
-                  name: decoded.name || decoded.given_name,
-                  email: decoded.email,
-                  avatar: decoded.picture
-                });
+            scope: 'openid profile email',
+            callback: async (tokenResponse) => {
+              if (tokenResponse && tokenResponse.access_token) {
+                setIsSending(true);
+                setError('');
+                try {
+                  // Fetch profile details from Google API using the access token
+                  const res = await fetch(`https://www.googleapis.com/oauth2/v3/userinfo?access_token=${tokenResponse.access_token}`);
+                  if (res.ok) {
+                    const userInfo = await res.json();
+                    onLoginSuccess({
+                      name: userInfo.name || userInfo.given_name,
+                      email: userInfo.email,
+                      avatar: userInfo.picture,
+                      accessToken: tokenResponse.access_token
+                    });
+                  } else {
+                    setError('FAILED TO RETRIEVE GOOGLE USER DETAILS');
+                  }
+                } catch {
+                  setError('CONNECTION ERROR RETRIEVING GOOGLE PROFILE');
+                } finally {
+                  setIsSending(false);
+                }
               }
             }
           });
-          
-          const btnContainer = document.getElementById('google-signin-btn-container');
-          if (btnContainer) {
-            window.google.accounts.id.renderButton(
-              btnContainer,
-              { 
-                theme: 'filled_black', 
-                size: 'large', 
-                type: 'standard', 
-                shape: 'rectangular',
-                text: 'signin_with', 
-                width: 376 
-              }
-            );
-          }
+          setTokenClient(client);
         } catch (e) {
-          console.error('Google Sign-In initialization failed:', e);
+          console.error('Google OAuth initialization failed:', e);
         }
       } else {
-        setTimeout(initializeGoogleSignIn, 500);
+        setTimeout(initializeGoogleOAuth, 500);
       }
     };
 
-    initializeGoogleSignIn();
-  }, [googleClientId, step, onLoginSuccess]);
+    initializeGoogleOAuth();
+  }, [googleClientId, onLoginSuccess]);
 
   const handleSendEmailOtp = async (e) => {
     e.preventDefault();
@@ -115,10 +101,28 @@ export default function Login({ onLoginSuccess, onSendEmailOtp, googleClientId }
   };
 
   const handleGoogleLogin = () => {
+    if (tokenClient) {
+      try {
+        tokenClient.requestAccessToken();
+      } catch (err) {
+        console.error('Google Sign-In trigger failed:', err);
+        triggerMockGoogleLogin();
+      }
+    } else {
+      triggerMockGoogleLogin();
+    }
+  };
+
+  const triggerMockGoogleLogin = () => {
     setIsSending(true);
+    setError('');
     setTimeout(() => {
       setIsSending(false);
-      onLoginSuccess({ name: 'Nithin (via Google)', email: 'nithin@void.gz' });
+      onLoginSuccess({ 
+        name: 'Nithin (via Google)', 
+        email: 'nithin@void.gz',
+        accessToken: 'mock_access_token_12345'
+      });
     }, 800);
   };
 
@@ -164,19 +168,15 @@ export default function Login({ onLoginSuccess, onSendEmailOtp, googleClientId }
               <div style={{ flexGrow: 1, height: '1px', background: 'var(--border-subtle)' }}></div>
             </div>
 
-            {googleClientId ? (
-              <div id="google-signin-btn-container" style={{ width: '100%', minHeight: '44px', display: 'flex', justifyContent: 'center' }}></div>
-            ) : (
-              <button 
-                type="button" 
-                className="btn-secondary" 
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', background: 'rgba(255,255,255,0.02)', width: '100%' }}
-                onClick={handleGoogleLogin}
-                disabled={isSending}
-              >
-                Sign in with Google
-              </button>
-            )}
+            <button 
+              type="button" 
+              className="btn-secondary" 
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', background: 'rgba(255,255,255,0.02)', width: '100%' }}
+              onClick={handleGoogleLogin}
+              disabled={isSending}
+            >
+              Sign in with Google
+            </button>
           </div>
         ) : (
           <form onSubmit={handleVerifyEmailOtp}>
@@ -229,6 +229,7 @@ export default function Login({ onLoginSuccess, onSendEmailOtp, googleClientId }
     </div>
   );
 }
+
 
 
 

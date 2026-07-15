@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Minus, Plus, Gamepad2, Check, Clock, Calendar } from 'lucide-react';
+import { Minus, Plus, Gamepad2, Check, Calendar } from 'lucide-react';
 
 export default function ClockInterface({ settings, onBookSession, activeBooking, bookings = [] }) {
   const minTime = settings.minTime || 30; // in minutes

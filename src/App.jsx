@@ -37,18 +37,7 @@ export default function App() {
     return saved ? JSON.parse(saved) : null;
   });
 
-  const [smsGatewaySettings, setSmsGatewaySettings] = useState(() => {
-    const saved = localStorage.getItem('gz_sms_settings');
-    return saved ? JSON.parse(saved) : {
-      gateway: 'mock',
-      textbeltKey: 'textbelt',
-      twilioSid: '',
-      twilioToken: '',
-      twilioPhone: '',
-      fast2smsKey: '',
-      fast2smsRoute: 'otp'
-    };
-  });
+
 
   const [emailGatewaySettings, setEmailGatewaySettings] = useState(() => {
     const saved = localStorage.getItem('gz_email_settings');
@@ -64,8 +53,34 @@ export default function App() {
     return localStorage.getItem('gz_google_client_id') || '';
   });
 
+  const [adminAccessToken, setAdminAccessToken] = useState(() => {
+    return localStorage.getItem('gz_admin_access_token') || 'admin-token-777';
+  });
+
   // --- Temporary UI States ---
-  const [showAdmin, setShowAdmin] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(() => {
+    const path = window.location.pathname;
+    const searchParams = new URLSearchParams(window.location.search);
+    return path.includes('/admin') || searchParams.has('admin') || window.location.hash.includes('admin');
+  });
+
+  useEffect(() => {
+    const handleUrlChange = () => {
+      const path = window.location.pathname;
+      const searchParams = new URLSearchParams(window.location.search);
+      const isAdmin = path.includes('/admin') || searchParams.has('admin') || window.location.hash.includes('admin');
+      setShowAdmin(isAdmin);
+    };
+
+    window.addEventListener('popstate', handleUrlChange);
+    window.addEventListener('hashchange', handleUrlChange);
+
+    return () => {
+      window.removeEventListener('popstate', handleUrlChange);
+      window.removeEventListener('hashchange', handleUrlChange);
+    };
+  }, []);
+
   const [toasts, setToasts] = useState([]);
   
   // Timer Ref
@@ -88,9 +103,7 @@ export default function App() {
     localStorage.setItem('gz_bookings', JSON.stringify(bookings));
   }, [bookings]);
 
-  useEffect(() => {
-    localStorage.setItem('gz_sms_settings', JSON.stringify(smsGatewaySettings));
-  }, [smsGatewaySettings]);
+
 
   useEffect(() => {
     localStorage.setItem('gz_email_settings', JSON.stringify(emailGatewaySettings));
@@ -99,6 +112,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('gz_google_client_id', googleClientId);
   }, [googleClientId]);
+
+  useEffect(() => {
+    localStorage.setItem('gz_admin_access_token', adminAccessToken);
+  }, [adminAccessToken]);
 
   useEffect(() => {
     if (activeBooking) {
@@ -277,122 +294,7 @@ export default function App() {
     showToast('Booking records database cleared.');
   };
 
-  const sendOtpMessage = async (phone, code) => {
-    const { gateway, textbeltKey, twilioSid, twilioToken, twilioPhone, fast2smsKey, fast2smsRoute } = smsGatewaySettings;
-    let formattedPhone = phone.trim();
-    
-    try {
-      if (gateway === 'mock') {
-        showToast('🔒 Mock OTP sent! Enter code to authenticate:', code);
-        return { success: true };
-      }
-      
-      if (gateway === 'textbelt') {
-        let textbeltPhone = formattedPhone;
-        if (!textbeltPhone.startsWith('+')) {
-          textbeltPhone = '+91' + textbeltPhone;
-        }
-        
-        const response = await fetch('/api/textbelt/text', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            phone: textbeltPhone,
-            message: `Your VOID.GZ verification code is: ${code}`,
-            key: textbeltKey || 'textbelt'
-          })
-        });
-        
-        const data = await response.json();
-        if (data.success) {
-          showToast(`⚡ Real OTP sent via Textbelt to ${textbeltPhone}`);
-          return { success: true };
-        } else {
-          return { success: false, error: data.error || 'Textbelt transmission failed' };
-        }
-      }
-      
-      if (gateway === 'twilio') {
-        if (!twilioSid || !twilioToken || !twilioPhone) {
-          return { success: false, error: 'Twilio configuration is incomplete' };
-        }
-        
-        let twilioTo = formattedPhone;
-        if (!twilioTo.startsWith('+')) {
-          twilioTo = '+91' + twilioTo;
-        }
-        
-        const auth = btoa(`${twilioSid}:${twilioToken}`);
-        const bodyParams = new URLSearchParams();
-        bodyParams.append('To', twilioTo);
-        bodyParams.append('From', twilioPhone);
-        bodyParams.append('Body', `Your VOID.GZ verification code is: ${code}`);
-        
-        const response = await fetch(`/api/twilio/2010-04-01/Accounts/${twilioSid}/Messages.json`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Basic ${auth}`,
-            'Content-Type': 'application/x-www-form-urlencoded'
-          },
-          body: bodyParams.toString()
-        });
-        
-        const data = await response.json();
-        if (response.ok) {
-          showToast(`⚡ Real OTP sent via Twilio to ${twilioTo}`);
-          return { success: true };
-        } else {
-          return { success: false, error: data.message || 'Twilio transmission failed' };
-        }
-      }
-      
-      if (gateway === 'fast2sms') {
-        if (!fast2smsKey) {
-          return { success: false, error: 'Fast2SMS API Key is missing' };
-        }
-        
-        const fast2smsTo = formattedPhone.replace(/\D/g, '').slice(-10);
-        if (fast2smsTo.length !== 10) {
-          return { success: false, error: 'Fast2SMS requires a 10-digit mobile number' };
-        }
-        
-        const payload = {
-          route: fast2smsRoute || 'otp',
-          numbers: fast2smsTo
-        };
-        
-        if (fast2smsRoute === 'otp') {
-          payload.variables_values = code;
-        } else {
-          payload.message = `Your VOID.GZ verification code is: ${code}`;
-        }
-        
-        const response = await fetch('/api/fast2sms/dev/bulkV2', {
-          method: 'POST',
-          headers: {
-            'authorization': fast2smsKey,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(payload)
-        });
-        
-        const data = await response.json();
-        if (data.return) {
-          showToast(`⚡ Real OTP sent via Fast2SMS to ${fast2smsTo}`);
-          return { success: true };
-        } else {
-          return { success: false, error: data.message || 'Fast2SMS transmission failed' };
-        }
-      }
-      
-      return { success: false, error: 'Unknown SMS Gateway' };
-    } catch (err) {
-      console.error('SMS Gateway Error:', err);
-      return { success: false, error: err.message || 'Network connection error' };
-    }
-  };
+
 
   const sendEmailOtp = async (email, code) => {
     const { gateway, emailjsServiceId, emailjsTemplateId, emailjsPublicKey } = emailGatewaySettings;
@@ -563,32 +465,30 @@ export default function App() {
         <AdminPanel 
           settings={settings}
           onUpdateSettings={handleUpdateSettings}
-          smsGatewaySettings={smsGatewaySettings}
-          onUpdateSmsSettings={setSmsGatewaySettings}
-          onSendOtpMessage={sendOtpMessage}
           emailGatewaySettings={emailGatewaySettings}
           onUpdateEmailSettings={setEmailGatewaySettings}
           onSendEmailOtp={sendEmailOtp}
           googleClientId={googleClientId}
           onUpdateGoogleClientId={setGoogleClientId}
+          adminAccessToken={adminAccessToken}
+          onUpdateAdminAccessToken={setAdminAccessToken}
+          user={user}
           bookings={bookings}
           activeBooking={activeBooking}
           onClearBookings={handleClearBookings}
           onEndActiveSession={handleEndActiveSession}
-          onClose={() => setShowAdmin(false)}
+          onClose={() => {
+            setShowAdmin(false);
+            window.history.pushState(null, '', '/');
+          }}
         />
       )}
 
       {/* Main Footer */}
       <footer className="app-footer">
-        <div className="footer-container">
+        <div className="footer-container" style={{ justifyContent: 'center' }}>
           <div>
             &copy; {new Date().getFullYear()} VOID GAMING ZONE. ALL RIGS RESERVED.
-          </div>
-          <div>
-            <button onClick={() => setShowAdmin(true)} className="footer-admin-btn">
-              ADMIN CONTROL PANEL (PIN: 0000)
-            </button>
           </div>
         </div>
       </footer>

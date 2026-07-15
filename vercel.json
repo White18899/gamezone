@@ -11,6 +11,14 @@
     {
       "source": "/api/textbelt/:path*",
       "destination": "https://textbelt.com/:path*"
+    },
+    {
+      "source": "/admin",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
     }
   ]
 }
