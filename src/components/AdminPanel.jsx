@@ -446,6 +446,7 @@ export default function AdminPanel({ settings, onUpdateSettings, emailGatewaySet
                         <button
                           type="button"
                           onClick={() => {
+                            if (stations.length <= 1) {
                               showToast('Cannot delete the last console. At least one console must remain.');
                               return;
                             }
@@ -485,6 +486,7 @@ export default function AdminPanel({ settings, onUpdateSettings, emailGatewaySet
                 if (!newConsoleName.trim()) return;
                 
                 // Check duplicate names
+                if (stations.some(s => s.name.toLowerCase() === newConsoleName.trim().toLowerCase())) {
                   showToast('A console with this label name already exists.');
                   return;
                 }
