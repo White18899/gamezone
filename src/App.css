@@ -166,6 +166,7 @@
   justify-content: center;
   align-items: center;
   padding: 2rem;
+  pointer-events: auto;
 }
 
 .login-card {
@@ -182,9 +183,46 @@
   font-weight: 700;
   letter-spacing: 0.3em;
   text-align: center;
-  margin-bottom: 3rem;
+  margin-bottom: 2.5rem;
   text-transform: uppercase;
 }
+
+/* Login Tabs styling */
+.login-tabs {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 0.75rem;
+  margin-bottom: 2rem;
+  gap: 0.25rem;
+}
+
+.login-tab {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  padding: 0.5rem 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  flex-grow: 1;
+  text-align: center;
+}
+
+.login-tab:hover {
+  color: var(--text-primary);
+}
+
+.login-tab.active {
+  color: var(--text-primary);
+  background-color: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 
 .form-group {
   margin-bottom: 2rem;
