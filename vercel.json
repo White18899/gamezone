@@ -1,0 +1,16 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/twilio/:path*",
+      "destination": "https://api.twilio.com/:path*"
+    },
+    {
+      "source": "/api/fast2sms/:path*",
+      "destination": "https://www.fast2sms.com/:path*"
+    },
+    {
+      "source": "/api/textbelt/:path*",
+      "destination": "https://textbelt.com/:path*"
+    }
+  ]
+}

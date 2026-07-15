@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Settings, Database, Server, Key, Eye, EyeOff, Smartphone, Send, RefreshCw, Mail } from 'lucide-react';
 
-export default function AdminPanel({ settings, onUpdateSettings, smsGatewaySettings, onUpdateSmsSettings, onSendOtpMessage, emailGatewaySettings, onUpdateEmailSettings, onSendEmailOtp, bookings, onClose, onClearBookings, onEndActiveSession, activeBooking }) {
+export default function AdminPanel({ settings, onUpdateSettings, smsGatewaySettings, onUpdateSmsSettings, onSendOtpMessage, emailGatewaySettings, onUpdateEmailSettings, onSendEmailOtp, googleClientId, onUpdateGoogleClientId, bookings, onClose, onClearBookings, onEndActiveSession, activeBooking }) {
   const [pin, setPin] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showPin, setShowPin] = useState(false);
