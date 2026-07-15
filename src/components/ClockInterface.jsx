@@ -399,6 +399,38 @@ export default function ClockInterface({ settings, onBookSession, activeBooking,
         <>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
             
+            {/* Mobile Start Time Selector Dropdown */}
+            <div>
+              <label className="form-label" htmlFor="reserve-start-time-dropdown">
+                <Calendar size={10} style={{ verticalAlign: 'middle', marginRight: '0.5rem', opacity: 0.5 }} />
+                Select Start Time Slot
+              </label>
+              <select
+                id="reserve-start-time-dropdown"
+                className="form-input mono-input"
+                value={selectedStart}
+                onChange={(e) => setSelectedStart(e.target.value)}
+                style={{ padding: '0.8rem 1.25rem', background: '#050505', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)' }}
+              >
+                <option value="now" disabled={!!activeBooking} style={{ color: '#34c759' }}>Immediate (Now)</option>
+                {timeSlots.map((slot) => {
+                  const slotStart = slot.date;
+                  const slotEnd = new Date(slotStart.getTime() + duration * 60 * 1000);
+                  const overlap = checkTimeOverlap(slotStart, slotEnd);
+                  return (
+                    <option 
+                      key={slot.value} 
+                      value={slot.value}
+                      disabled={overlap.isReserved}
+                      style={{ color: overlap.isReserved ? '#ff3b30' : 'var(--text-primary)' }}
+                    >
+                      {slot.label} {overlap.isReserved ? '(Reserved / Busy)' : ''}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
             {/* Time Slider (Controls Duration) */}
             <div>
               <label className="form-label">

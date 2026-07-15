@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy:pages": "vite build && wrangler pages deploy dist"
   },
   "dependencies": {
     "lucide-react": "^1.24.0",
