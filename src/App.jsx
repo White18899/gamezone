@@ -71,7 +71,11 @@ export default function App() {
   });
 
   const [cfWorkerUrl, setCfWorkerUrl] = useState(() => {
-    return localStorage.getItem('gz_cf_worker_url') || '';
+    return localStorage.getItem('gz_cf_worker_url') || 'https://gamezone-backend.white018899.workers.dev';
+  });
+
+  const [dbStatus, setDbStatus] = useState(() => {
+    return (localStorage.getItem('gz_cf_worker_url') || 'https://gamezone-backend.white018899.workers.dev') ? 'connecting' : 'local';
   });
 
   useEffect(() => {
@@ -79,15 +83,20 @@ export default function App() {
       localStorage.setItem('gz_cf_worker_url', cfWorkerUrl);
     } else {
       localStorage.removeItem('gz_cf_worker_url');
+      setDbStatus('local');
     }
   }, [cfWorkerUrl]);
 
   // Pull Cloud Data Effect
   useEffect(() => {
-    if (!cfWorkerUrl) return;
+    if (!cfWorkerUrl) {
+      setDbStatus('local');
+      return;
+    }
 
     const loadCloudData = async () => {
       try {
+        setDbStatus('connecting');
         const res = await fetch(`${cfWorkerUrl.replace(/\/$/, '')}/api/data`);
         if (!res.ok) throw new Error(`HTTP error ${res.status}`);
         const data = await res.json();
@@ -103,8 +112,10 @@ export default function App() {
           
           showToast('🤖 Serverless cloud database synced.');
         }
+        setDbStatus('online');
       } catch (err) {
         console.error('Failed to sync cloud databases:', err);
+        setDbStatus('error');
         showToast('⚠️ Cloud database connection failed. Running offline mode.');
       }
     };
@@ -501,7 +512,18 @@ export default function App() {
             VOID<span className="logo-dot"></span>GAMING ZONE
           </a>
 
-          <div className="header-actions">
+          <div className="header-actions" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+            {/* Connection Status Badge */}
+            <div className="user-badge" style={{ 
+              borderColor: dbStatus === 'online' ? 'rgba(52, 199, 89, 0.2)' : dbStatus === 'error' ? 'rgba(255, 59, 48, 0.2)' : 'rgba(255, 255, 255, 0.15)', 
+              color: dbStatus === 'online' ? '#34c759' : dbStatus === 'error' ? '#ff3b30' : 'var(--text-secondary)' 
+            }}>
+              <Wifi size={12} className={dbStatus === 'connecting' ? 'animate-pulse' : ''} />
+              <span style={{ fontSize: '0.65rem', textTransform: 'uppercase', fontWeight: '500' }}>
+                {dbStatus === 'online' ? 'Cloud Online' : dbStatus === 'error' ? 'Sync Error' : dbStatus === 'connecting' ? 'Connecting' : 'Local DB'}
+              </span>
+            </div>
+
             {user ? (
               <>
                 <div className="user-badge">
@@ -514,7 +536,7 @@ export default function App() {
               </>
             ) : (
               <div className="user-badge" style={{ borderColor: 'rgba(255, 255, 255, 0.15)', color: 'var(--text-secondary)' }}>
-                <Wifi size={12} className="animate-pulse" /> Offline Mode
+                <span>Standby</span>
               </div>
             )}
           </div>

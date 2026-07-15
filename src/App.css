@@ -977,13 +977,17 @@
   }
 
   /* Login card responsiveness */
+  .overlay-container {
+    padding: 1rem;
+  }
+
   .login-card {
-    padding: 2rem 1.5rem;
+    padding: 2.25rem 1.5rem;
     width: 100%;
-    max-width: none;
-    border: none;
-    border-radius: 0;
-    min-height: 100vh;
+    max-width: 380px;
+    margin: 0 auto;
+    border-radius: var(--radius-sm);
+    min-height: auto;
     display: flex;
     flex-direction: column;
     justify-content: center;

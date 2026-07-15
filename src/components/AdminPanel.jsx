@@ -39,7 +39,7 @@ export default function AdminPanel({ settings, onUpdateSettings, emailGatewaySet
   const [emailjsTemplateId, setEmailjsTemplateId] = useState(emailGatewaySettings?.emailjsTemplateId || '');
   const [emailjsPublicKey, setEmailjsPublicKey] = useState(emailGatewaySettings?.emailjsPublicKey || '');
 
-  const [testEmail, setTestEmail] = useState('nithin@void.gz');
+  const [testEmail, setTestEmail] = useState('operator@void.gz');
   const [isTestingEmail, setIsTestingEmail] = useState(false);
   const [testEmailResult, setTestEmailResult] = useState(null);
 
@@ -642,7 +642,7 @@ export default function AdminPanel({ settings, onUpdateSettings, emailGatewaySet
                     id="test-email-input"
                     type="email"
                     className="form-input mono-input"
-                    placeholder="nithin@void.gz"
+                    placeholder="operator@void.gz"
                     value={testEmail}
                     onChange={(e) => setTestEmail(e.target.value)}
                   />

@@ -119,8 +119,8 @@ export default function Login({ onLoginSuccess, onSendEmailOtp, googleClientId }
     setTimeout(() => {
       setIsSending(false);
       onLoginSuccess({ 
-        name: 'Nithin (via Google)', 
-        email: 'nithin@void.gz',
+        name: 'Arena Guest (via Google)', 
+        email: 'guest@void.gz',
         accessToken: 'mock_access_token_12345'
       });
     }, 800);
@@ -128,7 +128,7 @@ export default function Login({ onLoginSuccess, onSendEmailOtp, googleClientId }
 
   return (
     <div className="overlay-container">
-      <div className="login-card glass border-glow animate-fade-in" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', width: '100%', maxWidth: '440px', padding: '2.5rem 2rem' }}>
+      <div className="login-card glass border-glow animate-fade-in" style={{ border: '1px solid rgba(255, 255, 255, 0.08)' }}>
         <div className="login-logo" style={{ marginBottom: '2rem' }}>
           VOID<span className="logo-dot"></span>GZ
         </div>
@@ -144,7 +144,7 @@ export default function Login({ onLoginSuccess, onSendEmailOtp, googleClientId }
                   id="email-input"
                   type="email"
                   className="form-input"
-                  placeholder="nithin@void.gz"
+                  placeholder="player@void.gz"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
