@@ -10,7 +10,7 @@ import { LogOut, Wifi, Clock } from 'lucide-react';
 // Default configurations
 const DEFAULT_SETTINGS = {
   minTime: 30, // in minutes
-  pricePerHalfHour: 50, // ₹50 per 30 minutes
+  pricePerHalfHour: 75, // ₹75 per 30 minutes
   stationName: 'PlayStation 5 Console #1',
   stationStatus: 'online'
 };
@@ -47,7 +47,26 @@ export default function App() {
 
   const [activeBookings, setActiveBookings] = useState(() => {
     const saved = localStorage.getItem('gz_active_bookings');
-    return saved ? JSON.parse(saved) : {};
+    const parsed = saved ? JSON.parse(saved) : {};
+    
+    // Adjust remaining seconds on mount dynamically based on endTime
+    const adjusted = { ...parsed };
+    const now = new Date();
+    for (const stationName of Object.keys(adjusted)) {
+      const session = adjusted[stationName];
+      if (session.endTime) {
+        const remaining = Math.max(0, Math.ceil((new Date(session.endTime).getTime() - now.getTime()) / 1000));
+        if (remaining <= 0) {
+          delete adjusted[stationName];
+        } else {
+          adjusted[stationName] = {
+            ...session,
+            secondsRemaining: remaining
+          };
+        }
+      }
+    }
+    return adjusted;
   });
 
 
@@ -75,7 +94,7 @@ export default function App() {
   });
 
   const [dbStatus, setDbStatus] = useState(() => {
-    return (localStorage.getItem('gz_cf_worker_url') || 'https://gamezone-backend.white018899.workers.dev') ? 'connecting' : 'local';
+    return 'connecting';
   });
 
   useEffect(() => {
@@ -105,7 +124,29 @@ export default function App() {
           if (data.settings) setSettings(data.settings);
           if (data.stations) setStations(data.stations);
           if (data.bookings) setBookings(data.bookings);
-          if (data.activeBookings) setActiveBookings(data.activeBookings);
+          
+          if (data.activeBookings) {
+            const adjustedActive = { ...data.activeBookings };
+            const now = new Date();
+            for (const name of Object.keys(adjustedActive)) {
+              const session = adjustedActive[name];
+              if (session.endTime) {
+                const remaining = Math.max(0, Math.ceil((new Date(session.endTime).getTime() - now.getTime()) / 1000));
+                if (remaining <= 0) {
+                  delete adjustedActive[name];
+                } else {
+                  adjustedActive[name] = {
+                    ...session,
+                    secondsRemaining: remaining
+                  };
+                }
+              }
+            }
+            setActiveBookings(adjustedActive);
+          } else {
+            setActiveBookings({});
+          }
+          
           if (data.emailGatewaySettings) setEmailGatewaySettings(data.emailGatewaySettings);
           if (data.googleClientId) setGoogleClientId(data.googleClientId);
           if (data.adminAccessToken) setAdminAccessToken(data.adminAccessToken);
@@ -123,7 +164,32 @@ export default function App() {
     loadCloudData();
   }, [cfWorkerUrl]);
 
-  // Push Cloud Data Effect
+  // Instant Cloud Sync Helper
+  const pushStateToCloud = async (customBookings, customActiveBookings) => {
+    if (!cfWorkerUrl) return;
+    try {
+      const payload = {
+        settings,
+        stations,
+        bookings: customBookings || bookings,
+        activeBookings: customActiveBookings || activeBookings,
+        emailGatewaySettings,
+        googleClientId,
+        adminAccessToken
+      };
+      await fetch(`${cfWorkerUrl.replace(/\/$/, '')}/api/data`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+    } catch (err) {
+      console.error('Instant cloud push failed:', err);
+    }
+  };
+
+  // Push Cloud Data Effect (Debounced, excludes activeBookings countdown updates)
   const isInitialMount = useRef(true);
   useEffect(() => {
     if (isInitialMount.current) {
@@ -160,7 +226,7 @@ export default function App() {
 
     const handler = setTimeout(pushCloudData, 1000);
     return () => clearTimeout(handler);
-  }, [cfWorkerUrl, settings, stations, bookings, activeBookings, emailGatewaySettings, googleClientId, adminAccessToken]);
+  }, [cfWorkerUrl, settings, stations, bookings, emailGatewaySettings, googleClientId, adminAccessToken]);
 
 
 
@@ -297,18 +363,21 @@ export default function App() {
           duration: scheduled.duration,
           accountType: scheduled.accountType,
           price: scheduled.price,
-          secondsRemaining: scheduled.duration,
-          maxDuration: scheduled.duration,
+          endTime: scheduled.endTime,
+          secondsRemaining: scheduled.duration * 60,
+          maxDuration: scheduled.duration * 60,
           reservedTime: new Date(scheduled.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
         };
 
-        setBookings((prev) =>
-          prev.map((b) => (b.id === scheduled.id ? { ...b, status: 'Active' } : b))
-        );
-        setActiveBookings((prev) => ({
-          ...prev,
+        const nextBookings = bookings.map((b) => (b.id === scheduled.id ? { ...b, status: 'Active' } : b));
+        const nextActiveBookings = {
+          ...activeBookings,
           [scheduled.stationName]: newSession
-        }));
+        };
+
+        setBookings(nextBookings);
+        setActiveBookings(nextActiveBookings);
+        pushStateToCloud(nextBookings, nextActiveBookings);
         showToast(`⚡ Scheduled slot on ${scheduled.stationName} is now ACTIVE!`);
       }
     }, 3000);
@@ -371,17 +440,27 @@ export default function App() {
         duration: bookingDetails.duration,
         accountType: bookingDetails.accountType,
         price: bookingDetails.price,
-        secondsRemaining: bookingDetails.duration,
-        maxDuration: bookingDetails.duration,
+        endTime: endTime.toISOString(),
+        secondsRemaining: bookingDetails.duration * 60,
+        maxDuration: bookingDetails.duration * 60,
         reservedTime: endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
       };
-      setActiveBookings((prev) => ({
-        ...prev,
+      
+      const nextBookings = [record, ...bookings];
+      const nextActiveBookings = {
+        ...activeBookings,
         [bookingDetails.stationName]: newSession
-      }));
+      };
+
+      setBookings(nextBookings);
+      setActiveBookings(nextActiveBookings);
+      pushStateToCloud(nextBookings, nextActiveBookings);
+    } else {
+      const nextBookings = [record, ...bookings];
+      setBookings(nextBookings);
+      pushStateToCloud(nextBookings, activeBookings);
     }
 
-    setBookings((old) => [record, ...old]);
     showToast(isNow ? `⚡ Station booked immediately!` : `📅 Reserved slot for ${startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}!`);
   };
 
@@ -389,25 +468,28 @@ export default function App() {
     const targetSession = activeBookings[stationName];
     if (!targetSession) return;
     
+    const maxDur = Number(targetSession.maxDuration) || (Number(targetSession.duration) * 60) || 1800;
+    const secRem = Number(targetSession.secondsRemaining) || 0;
+
     // End session early
-    const updatedBookings = bookings.map((b) => {
+    const nextBookings = bookings.map((b) => {
       if (b.id === targetSession.id) {
         return {
           ...b,
           status: 'Ended Early',
-          duration: targetSession.maxDuration - Math.ceil(targetSession.secondsRemaining),
+          duration: Math.max(1, Math.ceil((maxDur - secRem) / 60)),
           timestamp: new Date().toLocaleString()
         };
       }
       return b;
     });
 
-    setBookings(updatedBookings);
-    setActiveBookings((prev) => {
-      const updated = { ...prev };
-      delete updated[stationName];
-      return updated;
-    });
+    const nextActiveBookings = { ...activeBookings };
+    delete nextActiveBookings[stationName];
+
+    setBookings(nextBookings);
+    setActiveBookings(nextActiveBookings);
+    pushStateToCloud(nextBookings, nextActiveBookings);
     showToast(`Session on ${stationName} terminated.`);
   };
 
@@ -470,12 +552,17 @@ export default function App() {
     }
   };
 
-  // Format active session remaining seconds into MM:SS
-  const formatTimer = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
+  // Format active session remaining seconds into HHh MMm SSs or MM:SS
+  const formatTimer = (totalSeconds) => {
+    const hrs = Math.floor(totalSeconds / 3600);
+    const mins = Math.floor((totalSeconds % 3600) / 60);
+    const secs = totalSeconds % 60;
     const padMin = mins.toString().padStart(2, '0');
     const padSec = secs.toString().padStart(2, '0');
+    
+    if (hrs > 0) {
+      return `${hrs}h ${padMin}m ${padSec}s`;
+    }
     return `${padMin}:${padSec}`;
   };
 

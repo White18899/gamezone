@@ -1,33 +1,31 @@
 import React, { useState, useEffect } from 'react';
-import { Minus, Plus, Gamepad2, Check, Calendar } from 'lucide-react';
+import { Minus, Plus, Gamepad2, Check, Calendar, Clock, AlertTriangle } from 'lucide-react';
 
 export default function ClockInterface({ settings, onBookSession, activeBooking, bookings = [] }) {
   const minTime = settings.minTime || 30; // in minutes
-  const pricePerHalfHour = settings.pricePerHalfHour || 50;
+  const pricePerHalfHour = settings.pricePerHalfHour || 75; // ₹75 per 30 minutes
   const stationName = settings.stationName || 'PlayStation 5 Console #1';
   const isOffline = settings.stationStatus === 'maintenance';
 
   // --- States ---
   const [duration, setDuration] = useState(minTime);
   const [accountType, setAccountType] = useState('own'); // 'own' or 'gamezone'
-  const [selectedStart, setSelectedStart] = useState('now'); // 'now' or ISO timestamp
-  const [hoveredTick, setHoveredTick] = useState(null); // index (0-23)
+  const [selectedStart, setSelectedStart] = useState('now'); // 'now' or ISO string
   const [nowTime, setNowTime] = useState(new Date());
 
-  // Ticker to update slots time reference
+  // Ticker for live time
   useEffect(() => {
-    const timer = setInterval(() => setNowTime(new Date()), 10000);
+    const timer = setInterval(() => setNowTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // Sync duration with settings change if active duration is less than new minTime
+  // Sync duration with minimum settings if changed
   useEffect(() => {
     if (duration < minTime) {
       setDuration(minTime);
     }
   }, [minTime, duration]);
 
-  // Adjust duration by 30-min steps
   const incrementTime = () => {
     setDuration((prev) => Math.min(480, prev + 30));
   };
@@ -52,44 +50,35 @@ export default function ClockInterface({ settings, onBookSession, activeBooking,
     return `${hrs}h ${remainingMins}m`;
   };
 
-  // Generate slots for schedule (30 min intervals, 24 slots total)
-  const generateSlots = () => {
+  // Generate 30-minute slots inside Arena operational hours (10:00 - 23:00)
+  const generateArenaSlots = () => {
     const slots = [];
-    const coeff = 1000 * 60 * 30; // 30 mins
-    const startOfNextSlot = new Date(Math.ceil(nowTime.getTime() / coeff) * coeff);
+    const today = new Date(nowTime);
+    
+    for (let hour = 10; hour < 23; hour++) {
+      // Slot 1: hour:00
+      const d1 = new Date(today);
+      d1.setHours(hour, 0, 0, 0);
+      slots.push(d1);
 
-    for (let i = 0; i < 24; i++) {
-      const slotTime = new Date(startOfNextSlot.getTime() + i * 30 * 60 * 1000);
-      const timeString = slotTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-      slots.push({
-        value: slotTime.toISOString(),
-        label: timeString,
-        date: slotTime
-      });
+      // Slot 2: hour:30
+      const d2 = new Date(today);
+      d2.setHours(hour, 30, 0, 0);
+      slots.push(d2);
     }
     return slots;
   };
 
-  const timeSlots = generateSlots();
-  const selectedIndex = timeSlots.findIndex((s) => s.value === selectedStart);
-  const durationTicksCount = Math.ceil(duration / 30);
+  const timeSlots = generateArenaSlots();
 
-  // Range helper
-  const getSelectedRange = () => {
-    const start = selectedStart === 'now' ? new Date() : new Date(selectedStart);
-    const end = new Date(start.getTime() + duration * 60 * 1000);
-    return { start, end };
-  };
-
-  const currentPreview = getSelectedRange();
-
-  // Check overlap helper
+  // Helper to check overlap with active sessions or scheduled bookings
   const checkTimeOverlap = (tickStart, tickEnd) => {
     if (activeBooking) {
+      // activeBooking is running right now!
       const activeStart = new Date(Date.now() - (activeBooking.maxDuration - activeBooking.secondsRemaining) * 1000);
       const activeEnd = new Date(activeStart.getTime() + activeBooking.maxDuration * 60 * 1000);
       if (activeStart < tickEnd && activeEnd > tickStart) {
-        return { isReserved: true };
+        return { isReserved: true, user: 'Active Session' };
       }
     }
 
@@ -98,7 +87,7 @@ export default function ClockInterface({ settings, onBookSession, activeBooking,
         const bStart = new Date(b.startTime);
         const bEnd = new Date(b.endTime);
         if (bStart < tickEnd && bEnd > tickStart) {
-          return { isReserved: true };
+          return { isReserved: true, user: b.userName };
         }
       }
     }
@@ -106,154 +95,38 @@ export default function ClockInterface({ settings, onBookSession, activeBooking,
     return { isReserved: false };
   };
 
-  // Clock A geometry
-  const radius = 70;
-  const circumference = 2 * Math.PI * radius;
-  const percentage = Math.min(1, (duration - minTime) / (480 - minTime || 1));
-  const strokeDashoffset = circumference - percentage * circumference;
-
-  // Click handler on Clock B tick
-  const handleTickClick = (index) => {
-    const slot = timeSlots[index];
-    // Set selected start time to the clicked slot's ISO timestamp
-    setSelectedStart(slot.value);
-  };
-
-  // Clock B ticks generator (both visible ticks and transparent hitboxes)
-  const renderScheduleTicks = () => {
-    const elements = [];
-    const center = 100;
-    const innerRadius = 56;
-    const outerRadius = 70;
-    const hitInner = 45;
-    const hitOuter = 78;
-
-    for (let i = 0; i < 24; i++) {
-      const tickStart = timeSlots[i]?.date || new Date();
-      const slotHour = tickStart.getHours();
-      const slotMin = tickStart.getMinutes();
-      const angleDeg = (slotHour % 12) * 30 + (slotMin / 60) * 30 - 90;
-      const angleRad = (angleDeg * Math.PI) / 180;
-      const tickEnd = new Date(tickStart.getTime() + 30 * 60 * 1000);
-
-      const overlap = checkTimeOverlap(tickStart, tickEnd);
-      const isReserved = overlap.isReserved;
-
-      // Check if tick is part of selected preview range
-      const isSelectedPreview = selectedStart !== 'now' && selectedIndex !== -1 && 
-        ((i - selectedIndex + 24) % 24 < durationTicksCount);
-
-      // Check if tick is part of hover preview range
-      const isHoverPreview = hoveredTick !== null && 
-        ((i - hoveredTick + 24) % 24 < durationTicksCount);
-
-      // Math coordinates
-      const x1 = center + innerRadius * Math.cos(angleRad);
-      const y1 = center + innerRadius * Math.sin(angleRad);
-      const x2 = center + outerRadius * Math.cos(angleRad);
-      const y2 = center + outerRadius * Math.sin(angleRad);
-
-      const hx1 = center + hitInner * Math.cos(angleRad);
-      const hy1 = center + hitInner * Math.sin(angleRad);
-      const hx2 = center + hitOuter * Math.cos(angleRad);
-      const hy2 = center + hitOuter * Math.sin(angleRad);
-
-      let strokeColor = 'rgba(255, 255, 255, 0.05)';
-      let strokeWidth = '1.5px';
-      let filterStyle = {};
-
-      if (isReserved) {
-        strokeColor = '#ffffff';
-        strokeWidth = '3.5px';
-      } else if (isSelectedPreview) {
-        strokeColor = '#ffffff';
-        strokeWidth = '3.5px';
-        filterStyle = { filter: 'drop-shadow(0 0 4px #ffffff)' };
-      } else if (isHoverPreview) {
-        strokeColor = 'rgba(255, 255, 255, 0.35)';
-        strokeWidth = '3px';
-      }
-
-      // 1. Draw visual tick line
-      elements.push(
-        <line
-          key={`v-${i}`}
-          x1={x1}
-          y1={y1}
-          x2={x2}
-          y2={y2}
-          stroke={strokeColor}
-          strokeWidth={strokeWidth}
-          style={filterStyle}
-        />
-      );
-
-      // 2. Draw invisible hitbox for easy clicks
-      elements.push(
-        <line
-          key={`h-${i}`}
-          x1={hx1}
-          y1={hy1}
-          x2={hx2}
-          y2={hy2}
-          stroke="transparent"
-          strokeWidth="12"
-          style={{ cursor: isOffline || isReserved ? 'not-allowed' : 'pointer' }}
-          onMouseEnter={() => !isOffline && !isReserved && setHoveredTick(i)}
-          onMouseLeave={() => setHoveredTick(null)}
-          onClick={() => !isOffline && !isReserved && handleTickClick(i)}
-        />
-      );
-    }
-
-    return elements;
-  };
-
-  // Center display text configuration for Clock B
-  const getClockBText = () => {
-    if (isOffline) {
-      return {
-        value: 'OFFLINE',
-        label: 'MAINTENANCE',
-        action: null,
-        cursor: 'default'
-      };
-    }
+  // Live validator for selected start time + duration
+  const validateBookingRange = () => {
+    const start = selectedStart === 'now' ? new Date() : new Date(selectedStart);
+    const end = new Date(start.getTime() + duration * 60 * 1000);
     
-    const formattedEnd = currentPreview.end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-    
-    if (hoveredTick !== null) {
-      const tickStart = timeSlots[hoveredTick]?.date || new Date();
-      const tickEnd = new Date(tickStart.getTime() + duration * 60 * 1000);
-      const formattedTickEnd = tickEnd.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-      
-      return {
-        value: timeSlots[hoveredTick]?.label || '',
-        label: `TO ${formattedTickEnd}`,
-        action: null,
-        cursor: 'default'
-      };
+    // 1. Check if closed
+    const currentHour = nowTime.getHours();
+    if (selectedStart === 'now' && (currentHour < 10 || currentHour >= 23)) {
+      return { isValid: false, reason: 'ARENA IS CLOSED (HOURS: 10:00 - 23:00)' };
     }
-    if (selectedStart !== 'now') {
-      const selectedLabel = timeSlots[selectedIndex]?.label || '';
-      return {
-        value: selectedLabel,
-        label: `RESET (TO ${formattedEnd})`,
-        action: () => setSelectedStart('now'),
-        cursor: 'pointer'
-      };
+
+    // 2. Check if exceeds close time (23:00)
+    const arenaClose = new Date(start);
+    arenaClose.setHours(23, 0, 0, 0);
+    if (end > arenaClose) {
+      return { isValid: false, reason: 'EXCEEDS ARENA CLOSING TIME (23:00)' };
     }
-    return {
-      value: 'NOW',
-      label: `TO ${formattedEnd}`,
-      action: null,
-      cursor: 'default'
-    };
+
+    // 3. Check busy overlapping
+    const overlap = checkTimeOverlap(start, end);
+    if (overlap.isReserved) {
+      return { isValid: false, reason: `OVERLAPS WITH RESERVED SLOT (${overlap.user})` };
+    }
+
+    return { isValid: true };
   };
 
-  const clockBInfo = getClockBText();
+  const validation = validateBookingRange();
 
   const handleBook = () => {
+    if (!validation.isValid) return;
+
     const isNow = selectedStart === 'now';
     const startTimeObj = isNow ? new Date() : new Date(selectedStart);
 
@@ -267,144 +140,51 @@ export default function ClockInterface({ settings, onBookSession, activeBooking,
     });
   };
 
+  // Format digital clock
+  const liveClockString = nowTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+
   return (
-    <div className="card glass">
-      {/* Header Info */}
-      <div className="card-subtitle" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-        <Gamepad2 size={12} style={{ opacity: 0.6 }} /> RIG NODE STATE
-      </div>
-      <div className="card-title" style={{ marginTop: '0.25rem', marginBottom: '2.5rem' }}>
-        <span>{stationName}</span>
-        <span className="station-badge" style={{
-          backgroundColor: isOffline ? 'rgba(255, 59, 48, 0.1)' : activeBooking ? 'rgba(255, 214, 10, 0.1)' : 'rgba(52, 199, 89, 0.1)',
-          color: isOffline ? '#ff3b30' : activeBooking ? '#ffd60a' : '#34c759',
-          fontFamily: 'var(--font-mono)',
-          fontSize: '0.65rem',
-          letterSpacing: '0.05em',
-          textTransform: 'uppercase',
-          padding: '0.25rem 0.5rem',
-          borderRadius: 'var(--radius-sm)',
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '0.35rem'
-        }}>
-          <span className="station-status-indicator" style={{
-            width: '6px',
-            height: '6px',
-            borderRadius: '50%',
-            backgroundColor: isOffline ? '#ff3b30' : activeBooking ? '#ffd60a' : '#34c759'
-          }}></span>
-          {isOffline ? 'Offline' : activeBooking ? 'Busy' : 'Standby'}
-        </span>
-      </div>
-
-      {/* CLOCKS LAYOUT: Clock A (Duration) and Clock B (Availability & Click Schedule) */}
-      <div className="clocks-container" style={{ display: 'flex', justifyContent: 'space-around', gap: '2rem', flexWrap: 'wrap', marginBottom: '2rem' }}>
-        
-        {/* Clock A: Duration limit */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <span className="card-subtitle" style={{ fontSize: '0.6rem', letterSpacing: '0.12em', marginBottom: '1rem' }}>CLOCK A: PLAYTIME LIMIT</span>
-          <div className="svg-dial-wrapper" style={{ width: '180px', height: '180px' }}>
-            <svg className="dial-svg" viewBox="0 0 200 200" style={{ width: '100%', height: '100%' }}>
-              <circle
-                className="dial-track"
-                cx="100"
-                cy="100"
-                r={radius}
-                strokeWidth="2.5"
-                transform="rotate(-90 100 100)"
-              />
-              <circle
-                className="dial-progress"
-                cx="100"
-                cy="100"
-                r={radius}
-                strokeWidth="3.5"
-                strokeDasharray={circumference}
-                strokeDashoffset={strokeDashoffset}
-                transform="rotate(-90 100 100)"
-              />
-            </svg>
-            <div className="clock-center-info">
-              <span className="clock-time" style={{ fontSize: '2.25rem' }}>{formatDisplayTime(duration)}</span>
-              <span className="clock-label" style={{ fontSize: '0.55rem', letterSpacing: '0.1em' }}>Duration</span>
-            </div>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '2rem', width: '100%' }}>
+      
+      {/* 1. CONFIGURATION CARD */}
+      <div className="card glass">
+        <div className="card-subtitle" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Gamepad2 size={12} style={{ opacity: 0.6 }} /> <span>RIG CONFIGURATOR</span>
+          </div>
+          <div className="user-badge" style={{ borderColor: isOffline ? '#ff3b30' : activeBooking ? '#ffd60a' : '#34c759', color: isOffline ? '#ff3b30' : activeBooking ? '#ffd60a' : '#34c759' }}>
+            <span style={{ width: '4px', height: '4px', borderRadius: '50%', backgroundColor: 'currentColor', marginRight: '0.4rem', display: 'inline-block' }}></span>
+            <span style={{ fontSize: '0.6rem', textTransform: 'uppercase', fontWeight: '700' }}>
+              {isOffline ? 'offline' : activeBooking ? 'busy' : 'standby'}
+            </span>
           </div>
         </div>
 
-        {/* Clock B: Interactive Timeline Schedule (Reserved & Free time) */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <span className="card-subtitle" style={{ fontSize: '0.6rem', letterSpacing: '0.12em', marginBottom: '1rem' }}>CLOCK B: BOOKING TIMELINE</span>
-          <div className="svg-dial-wrapper" style={{ width: '180px', height: '180px' }}>
-            <svg className="dial-svg" viewBox="0 0 200 200" style={{ width: '100%', height: '100%' }}>
-              <circle cx="100" cy="100" r={radius} fill="none" stroke="rgba(255, 255, 255, 0.02)" strokeWidth="2.5" />
-              {renderScheduleTicks()}
-              {/* Clock Marks 12, 3, 6, 9 */}
-              <text x="100" y="18" textAnchor="middle" className="mono" style={{ fill: 'var(--text-secondary)', fontSize: '0.65rem', fontWeight: '500' }}>12</text>
-              <text x="182" y="104" textAnchor="middle" className="mono" style={{ fill: 'var(--text-secondary)', fontSize: '0.65rem', fontWeight: '500' }}>3</text>
-              <text x="100" y="188" textAnchor="middle" className="mono" style={{ fill: 'var(--text-secondary)', fontSize: '0.65rem', fontWeight: '500' }}>6</text>
-              <text x="18" y="104" textAnchor="middle" className="mono" style={{ fill: 'var(--text-secondary)', fontSize: '0.65rem', fontWeight: '500' }}>9</text>
-            </svg>
-            <div 
-              className="clock-center-info" 
-              onClick={!isOffline ? clockBInfo.action : null}
-              style={{ cursor: clockBInfo.cursor, userSelect: 'none' }}
-            >
-              <span className="clock-time" style={{ fontSize: '2.25rem', letterSpacing: '-0.02em' }}>{clockBInfo.value}</span>
-              <span 
-                className="clock-label" 
-                style={{ 
-                  fontSize: '0.55rem', 
-                  letterSpacing: '0.1em', 
-                  color: clockBInfo.label === 'RESET TO NOW' ? '#ffffff' : 'var(--text-secondary)',
-                  textDecoration: clockBInfo.label === 'RESET TO NOW' ? 'underline' : 'none'
-                }}
-              >
-                {clockBInfo.label}
-              </span>
-            </div>
+        <h2 className="card-title" style={{ fontSize: '1.5rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.75rem' }}>
+          {stationName}
+        </h2>
+
+        {isOffline ? (
+          <div style={{ padding: '2rem 1.5rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+            <AlertTriangle size={32} style={{ color: '#ff3b30', marginBottom: '1rem' }} />
+            <p className="mono" style={{ fontSize: '0.8rem', letterSpacing: '0.05em' }}>THIS CONSOLE NODE IS UNDER MAINTENANCE.</p>
           </div>
-        </div>
-
-      </div>
-
-      <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-        <p className="mono" style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-          {isOffline 
-            ? '⚠️ Rig selected is offline. Scheduler access disabled.' 
-            : '💡 Click directly on Clock B ticks to select a start time slot.'
-          }
-        </p>
-      </div>
-
-      {/* Booking Form Options */}
-      {isOffline ? (
-        <div className="glass" style={{ 
-          padding: '2.5rem 1.5rem', 
-          borderRadius: 'var(--radius-sm)', 
-          textAlign: 'center', 
-          border: '1px dashed #ff3b30', 
-          background: 'rgba(255, 59, 48, 0.02)',
-          marginTop: '1rem'
-        }}>
-          <Gamepad2 size={32} style={{ color: '#ff3b30', marginBottom: '1rem', display: 'inline-block' }} />
-          <h3 className="mono" style={{ fontSize: '0.9rem', color: '#ff3b30', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-            Rig Node Offline
-          </h3>
-          <p className="mono" style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.5rem', lineHeight: '1.4' }}>
-            This station is currently undergoing system configuration or routine server maintenance. Please select another active rig pod.
-          </p>
-        </div>
-      ) : (
-        <>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             
-            {/* Mobile Start Time Selector Dropdown */}
+            {/* Live Clock Card */}
+            <div className="glass" style={{ padding: '0.75rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: 'var(--radius-sm)', background: 'rgba(255,255,255,0.01)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.7rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
+                <Clock size={12} /> LIVE NODE TIME
+              </div>
+              <div className="mono" style={{ fontSize: '1.1rem', fontWeight: '700', letterSpacing: '0.05em', color: 'var(--text-primary)' }}>
+                {liveClockString}
+              </div>
+            </div>
+
+            {/* Start Time Select Dropdown */}
             <div>
-              <label className="form-label" htmlFor="reserve-start-time-dropdown">
-                <Calendar size={10} style={{ verticalAlign: 'middle', marginRight: '0.5rem', opacity: 0.5 }} />
-                Select Start Time Slot
-              </label>
+              <label className="form-label" htmlFor="reserve-start-time-dropdown">Start Time Slot</label>
               <select
                 id="reserve-start-time-dropdown"
                 className="form-input mono-input"
@@ -412,35 +192,39 @@ export default function ClockInterface({ settings, onBookSession, activeBooking,
                 onChange={(e) => setSelectedStart(e.target.value)}
                 style={{ padding: '0.8rem 1.25rem', background: '#050505', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)' }}
               >
-                <option value="now" disabled={!!activeBooking} style={{ color: '#34c759' }}>Immediate (Now)</option>
+                <option value="now" style={{ color: '#34c759' }}>Immediate (Now)</option>
                 {timeSlots.map((slot) => {
-                  const slotStart = slot.date;
-                  const slotEnd = new Date(slotStart.getTime() + duration * 60 * 1000);
-                  const overlap = checkTimeOverlap(slotStart, slotEnd);
+                  const isPast = slot < new Date(nowTime.getTime() - 1000 * 60 * 5); // 5 mins leeway
+                  const slotEnd = new Date(slot.getTime() + duration * 60 * 1000);
+                  const overlap = checkTimeOverlap(slot, slotEnd);
+                  const labelStr = slot.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+                  
                   return (
                     <option 
-                      key={slot.value} 
-                      value={slot.value}
-                      disabled={overlap.isReserved}
-                      style={{ color: overlap.isReserved ? '#ff3b30' : 'var(--text-primary)' }}
+                      key={slot.toISOString()} 
+                      value={slot.toISOString()}
+                      disabled={isPast || overlap.isReserved}
+                      style={{ color: isPast ? 'var(--text-muted)' : overlap.isReserved ? '#ff3b30' : 'var(--text-primary)' }}
                     >
-                      {slot.label} {overlap.isReserved ? '(Reserved / Busy)' : ''}
+                      {labelStr} {isPast ? '(Past)' : overlap.isReserved ? '(Busy)' : '(Free)'}
                     </option>
                   );
                 })}
               </select>
             </div>
 
-            {/* Time Slider (Controls Duration) */}
+            {/* Playtime Duration Slider */}
             <div>
-              <label className="form-label">
-                <Calendar size={10} style={{ verticalAlign: 'middle', marginRight: '0.5rem', opacity: 0.5 }} />
-                Configure Playtime Length
-              </label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                <label className="form-label" style={{ marginBottom: 0 }}>Playtime Length</label>
+                <span className="mono" style={{ fontSize: '0.8rem', color: 'var(--text-primary)', fontWeight: '600' }}>
+                  {formatDisplayTime(duration)}
+                </span>
+              </div>
               <div className="duration-slider-wrapper" style={{ margin: '0 auto', width: '100%', maxWidth: 'none' }}>
                 <button 
                   onClick={decrementTime} 
-                  disabled={duration <= minTime || !!activeBooking}
+                  disabled={duration <= minTime || (selectedStart === 'now' && !!activeBooking)}
                   className="slider-btn"
                 >
                   <Minus size={14} />
@@ -452,12 +236,12 @@ export default function ClockInterface({ settings, onBookSession, activeBooking,
                   step="15"
                   value={duration}
                   onChange={handleSliderChange}
-                  disabled={!!activeBooking}
+                  disabled={selectedStart === 'now' && !!activeBooking}
                   className="custom-range-slider"
                 />
                 <button 
                   onClick={incrementTime} 
-                  disabled={duration >= 480 || !!activeBooking}
+                  disabled={duration >= 480 || (selectedStart === 'now' && !!activeBooking)}
                   className="slider-btn"
                 >
                   <Plus size={14} />
@@ -465,71 +249,139 @@ export default function ClockInterface({ settings, onBookSession, activeBooking,
               </div>
             </div>
 
-            {/* Account selection toggle */}
+            {/* Credential Privilege Selection */}
             <div>
               <h3 className="card-subtitle">Credential Privilege</h3>
               <div className="account-selector" style={{ marginTop: '0.5rem' }}>
                 <div 
-                  className={`account-option ${accountType === 'own' ? 'selected' : ''}`}
-                  onClick={() => !activeBooking && setAccountType('own')}
+                  className={`account-option ${(selectedStart === 'now' && activeBooking) ? 'disabled' : ''} ${accountType === 'own' ? 'selected' : ''}`}
+                  onClick={() => !(selectedStart === 'now' && activeBooking) && setAccountType('own')}
                 >
                   <div className="option-title">User Account</div>
-                  <div className="option-desc">Connect using personal PlayStation Network credentials.</div>
+                  <div className="option-desc">Connect using personal PSN credentials.</div>
                 </div>
                 <div 
-                  className={`account-option ${accountType === 'gamezone' ? 'selected' : ''}`}
-                  onClick={() => !activeBooking && setAccountType('gamezone')}
+                  className={`account-option ${(selectedStart === 'now' && activeBooking) ? 'disabled' : ''} ${accountType === 'gamezone' ? 'selected' : ''}`}
+                  onClick={() => !(selectedStart === 'now' && activeBooking) && setAccountType('gamezone')}
                 >
                   <div className="option-title">Arena Account</div>
-                  <div className="option-desc">Play instantly using pre-loaded games on local admin account.</div>
+                  <div className="option-desc">Play instantly using pre-loaded games.</div>
                 </div>
               </div>
             </div>
 
-          </div>
-
-          {/* Timeline Reservation Summary Row */}
-          <div className="booking-summary-row" style={{ marginTop: '2.5rem' }}>
-            <div className="summary-info-wrapper">
-              <div className="summary-price-container">
-                <span className="summary-price-label">Reserve Start</span>
-                <span className="mono" style={{ fontSize: '1.25rem', marginTop: '0.25rem', fontWeight: '500', display: 'block' }}>
-                  {selectedStart === 'now' 
-                    ? 'IMMEDIATE' 
-                    : new Date(selectedStart).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
-                  }
+            {/* Validation Feedback Warning Box */}
+            {!validation.isValid && (
+              <div className="glass border-glow" style={{ padding: '0.75rem 1rem', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(255,59,48,0.2)', background: 'rgba(255,59,48,0.02)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <AlertTriangle size={14} style={{ color: '#ff3b30', flexShrink: 0 }} />
+                <span className="mono" style={{ fontSize: '0.65rem', color: '#ff3b30', letterSpacing: '0.05em' }}>
+                  {validation.reason}
                 </span>
               </div>
+            )}
 
-              <div className="summary-price-container est-finish-container">
-                <span className="summary-price-label">Est. Finish</span>
-                <span className="mono" style={{ fontSize: '1.25rem', marginTop: '0.25rem', fontWeight: '500', display: 'block' }}>
-                  {currentPreview.end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
-                </span>
-              </div>
-
+            {/* Pricing Summary & Booking Trigger */}
+            <div className="booking-summary-row" style={{ marginTop: '1rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border-subtle)' }}>
               <div className="summary-price-container estimated-rate-container">
                 <span className="summary-price-label">Estimated Rate</span>
                 <span className="summary-price" style={{ fontSize: '1.75rem', marginTop: '0' }}>₹{totalPrice}</span>
               </div>
+              <button 
+                onClick={handleBook} 
+                disabled={!validation.isValid}
+                className="btn-primary"
+                style={{ flexGrow: 1 }}
+              >
+                {selectedStart === 'now' ? 'Book Station' : 'Reserve Slot'} <Check size={14} />
+              </button>
             </div>
 
-            <button 
-              onClick={handleBook} 
-              disabled={!!activeBooking}
-              className="btn-primary"
-            >
-              {activeBooking 
-                ? 'Session Engaged' 
-                : selectedStart === 'now' 
-                  ? 'Book Station' 
-                  : 'Reserve Slot'
-              } 
-              <Check size={14} />
-            </button>
           </div>
-        </>
-      )}
+        )}
+      </div>
+
+      {/* 2. TIMELINE VISUAL SCHEDULER CARD */}
+      <div className="card glass">
+        <div className="card-subtitle" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Calendar size={12} style={{ opacity: 0.6 }} /> <span>ARENA BOOKING TIMELINE</span>
+          </div>
+          <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>10:00 - 23:00</span>
+        </div>
+
+        <h3 className="card-title" style={{ fontSize: '1rem', letterSpacing: '0.05em', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+          DAILY TIME SLOTS
+        </h3>
+
+        {isOffline ? (
+          <div style={{ padding: '2rem 1.5rem', textAlign: 'center', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.7rem' }}>
+            TIMELINE SUSPENDED FOR NODE REPAIR.
+          </div>
+        ) : (
+          <div className="timeline-container">
+            {/* Immediate "Now" selector button */}
+            <div 
+              onClick={() => {
+                const hr = nowTime.getHours();
+                if (hr >= 10 && hr < 23 && !activeBooking) {
+                  setSelectedStart('now');
+                }
+              }}
+              className={`timeline-slot ${selectedStart === 'now' ? 'selected' : ''} ${activeBooking ? 'busy' : (nowTime.getHours() < 10 || nowTime.getHours() >= 23) ? 'past' : 'free'}`}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <span className="mono" style={{ fontSize: '0.85rem', fontWeight: '700' }}>Immediate (Now)</span>
+                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                  Start current session instantly
+                </span>
+              </div>
+              <div className="mono" style={{ fontSize: '0.65rem', fontWeight: '600' }}>
+                {activeBooking ? `[BUSY UNTIL ${activeBooking.reservedTime}]` : (nowTime.getHours() < 10 || nowTime.getHours() >= 23) ? '[CLOSED]' : '[FREE]'}
+              </div>
+            </div>
+
+            {/* Loop through generated 30-min daily slots */}
+            {timeSlots.map((slot) => {
+              const slotIso = slot.toISOString();
+              const isPast = slot < new Date(nowTime.getTime() - 1000 * 60 * 5); // 5 mins leeway
+              const slotEnd = new Date(slot.getTime() + 30 * 60 * 1000);
+              const overlap = checkTimeOverlap(slot, slotEnd);
+              
+              const labelStart = slot.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+              const labelEnd = slotEnd.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+              
+              const isSelected = selectedStart === slotIso;
+
+              return (
+                <div
+                  key={slotIso}
+                  onClick={() => {
+                    if (!isPast && !overlap.isReserved) {
+                      setSelectedStart(slotIso);
+                    }
+                  }}
+                  className={`timeline-slot ${isSelected ? 'selected' : ''} ${isPast ? 'past' : overlap.isReserved ? 'busy' : 'free'}`}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <span className="mono" style={{ fontSize: '0.8rem', fontWeight: '600' }}>
+                      {labelStart} - {labelEnd}
+                    </span>
+                    {overlap.isReserved && (
+                      <span style={{ fontSize: '0.6rem', color: '#ff3b30', marginTop: '0.15rem' }}>
+                        Reserved by {overlap.user || 'Guest'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="mono" style={{ fontSize: '0.65rem', fontWeight: '600' }}>
+                    {isPast ? '[PAST]' : overlap.isReserved ? '[BUSY]' : '[FREE]'}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
     </div>
   );
 }
