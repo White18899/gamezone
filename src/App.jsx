@@ -70,6 +70,8 @@ export default function App() {
     return localStorage.getItem('gz_admin_access_token') || 'admin-token-777';
   });
 
+
+
   // --- Temporary UI States ---
   const [showAdmin, setShowAdmin] = useState(() => {
     const path = window.location.pathname;
@@ -567,6 +569,7 @@ export default function App() {
           activeBookings={activeBookings}
           onClearBookings={handleClearBookings}
           onEndActiveSession={handleEndActiveSession}
+          showToast={showToast}
           onClose={() => {
             setShowAdmin(false);
             window.history.pushState(null, '', '/');

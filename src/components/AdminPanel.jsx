@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Key, Eye, EyeOff } from 'lucide-react';
 
-export default function AdminPanel({ settings, onUpdateSettings, emailGatewaySettings, onUpdateEmailSettings, onSendEmailOtp, googleClientId, onUpdateGoogleClientId, adminAccessToken, onUpdateAdminAccessToken, user, bookings, onClose, onClearBookings, onEndActiveSession, activeBookings, stations, onUpdateStations }) {
+export default function AdminPanel({ settings, onUpdateSettings, emailGatewaySettings, onUpdateEmailSettings, onSendEmailOtp, googleClientId, onUpdateGoogleClientId, adminAccessToken, onUpdateAdminAccessToken, user, bookings, onClose, onClearBookings, onEndActiveSession, activeBookings, stations, onUpdateStations, showToast }) {
   const [pin, setPin] = useState('');
   const [tokenInput, setTokenInput] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
@@ -56,7 +56,7 @@ export default function AdminPanel({ settings, onUpdateSettings, emailGatewaySet
     });
     onUpdateGoogleClientId(gClientId);
     onUpdateAdminAccessToken(adminTokenVal);
-    alert('Gateways configurations updated.');
+    showToast('Gateways configurations updated.');
   };
 
   const handleSendTestEmail = async () => {
@@ -117,7 +117,7 @@ export default function AdminPanel({ settings, onUpdateSettings, emailGatewaySet
       minTime: parseInt(minTime, 10),
       pricePerHalfHour: parseFloat(pricePerHalfHour)
     });
-    alert('Configurations applied.');
+    showToast('Configurations applied.');
   };
 
   if (!isAuthenticated) {
@@ -446,8 +446,7 @@ export default function AdminPanel({ settings, onUpdateSettings, emailGatewaySet
                         <button
                           type="button"
                           onClick={() => {
-                            if (stations.length <= 1) {
-                              alert('Cannot delete the last console. At least one console must remain.');
+                              showToast('Cannot delete the last console. At least one console must remain.');
                               return;
                             }
                             if (confirm(`Are you sure you want to delete "${st.name}"?`)) {
@@ -486,8 +485,7 @@ export default function AdminPanel({ settings, onUpdateSettings, emailGatewaySet
                 if (!newConsoleName.trim()) return;
                 
                 // Check duplicate names
-                if (stations.some(s => s.name.toLowerCase() === newConsoleName.trim().toLowerCase())) {
-                  alert('A console with this label name already exists.');
+                  showToast('A console with this label name already exists.');
                   return;
                 }
                 
@@ -499,7 +497,7 @@ export default function AdminPanel({ settings, onUpdateSettings, emailGatewaySet
                 
                 onUpdateStations([...stations, newStation]);
                 setNewConsoleName('');
-                alert(`Successfully created ${newStation.name}.`);
+                showToast(`Successfully created ${newStation.name}.`);
               }} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginTop: '0.5rem' }}>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label" htmlFor="new-console-name-input">Console Label / Name</label>
